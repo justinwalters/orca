@@ -1,5 +1,5 @@
 // Leading status decorations that coding agents prepend to their OSC title —
-// Claude's '✳', Gemini's glyphs (✦ ⏲ ◇ ✋), braille spinners, and Claude's
+// Claude's '✳', other agents' status glyphs (✦ ⏲ ◇ ✋), braille spinners, and Claude's
 // '. '/'* ' working/idle prefixes. Once the tab bar shows the provider icon,
 // this leading glyph reads as a redundant second icon, so strip it from the
 // displayed title. Scoped to titles we already know belong to an agent.

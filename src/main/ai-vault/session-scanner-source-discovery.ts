@@ -21,7 +21,6 @@ import { antigravityDiscoveries } from './session-scanner-antigravity-sources'
 export const DEFAULT_CODEX_HOME_DIR = join(homedir(), '.codex')
 const CODEX_HOME_DIR = process.env.CODEX_HOME?.trim() || DEFAULT_CODEX_HOME_DIR
 const CODEX_SESSIONS_DIR = join(CODEX_HOME_DIR, 'sessions')
-const GEMINI_SESSIONS_DIR = join(homedir(), '.gemini', 'tmp')
 const COPILOT_SESSIONS_DIR = join(
   process.env.COPILOT_HOME?.trim() || join(homedir(), '.copilot'),
   'session-state'
@@ -115,12 +114,6 @@ function standardDiscoveries(
 ): Promise<SessionFileDiscovery>[] {
   return [
     ...antigravityDiscoveries(options, wslHomeDirs, limit, issues),
-    ...sessionRootDirs(options.geminiSessionsDir ?? GEMINI_SESSIONS_DIR, wslHomeDirs, [
-      '.gemini',
-      'tmp'
-    ]).map((rootDir) =>
-      discoverFiles({ rootDir, limit, agent: 'gemini', issues, extensions: ['.json', '.jsonl'] })
-    ),
     ...sessionRootDirs(options.copilotSessionsDir ?? COPILOT_SESSIONS_DIR, wslHomeDirs, [
       '.copilot',
       'session-state'

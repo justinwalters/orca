@@ -17,7 +17,6 @@ export const MOBILE_AGENT_ICON_ASSETS: Partial<Record<TuiAgent, ImageSourcePropT
   'mimo-code': require('../../../src/shared/agent-icons/mimo-code.png'),
   ante: require('../../../src/shared/agent-icons/ante.png'),
   trae: require('../../../src/shared/agent-icons/trae.png'),
-  gemini: require('../../../src/shared/agent-icons/gemini.png'),
   antigravity: require('../../../src/shared/agent-icons/antigravity.png'),
   goose: require('../../../src/shared/agent-icons/goose.png'),
   amp: require('../../../src/shared/agent-icons/amp.png'),

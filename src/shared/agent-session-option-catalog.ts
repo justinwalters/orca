@@ -4,10 +4,7 @@ import {
   CODEX_SESSION_OPTION_CATALOG,
   createClaudeCatalogOptions
 } from './agent-session-option-catalog-claude-codex'
-import {
-  CURSOR_SESSION_OPTION_CATALOG,
-  GEMINI_SESSION_OPTION_CATALOG
-} from './agent-session-option-catalog-gemini-cursor'
+import { CURSOR_SESSION_OPTION_CATALOG } from './agent-session-option-catalog-cursor'
 import type {
   AgentSessionOptionCatalog,
   AgentSessionOptionCatalogMap,
@@ -29,7 +26,6 @@ export { createClaudeCatalogOptions }
 const CATALOGS: AgentSessionOptionCatalogMap = {
   claude: CLAUDE_SESSION_OPTION_CATALOG,
   codex: CODEX_SESSION_OPTION_CATALOG,
-  gemini: GEMINI_SESSION_OPTION_CATALOG,
   cursor: CURSOR_SESSION_OPTION_CATALOG
 }
 

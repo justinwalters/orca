@@ -16,7 +16,6 @@ export const TUI_AGENT_AUTO_PICK_ORDER = [
   'trae',
   'pi',
   'omp',
-  'gemini',
   'antigravity',
   'aider',
   'goose',

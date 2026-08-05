@@ -131,7 +131,6 @@ describe('getDefaultSettings', () => {
     expect(settings.agentDefaultArgs).toMatchObject({
       claude: '--dangerously-skip-permissions',
       codex: '--dangerously-bypass-approvals-and-sandbox',
-      gemini: '--yolo',
       cursor: '--yolo',
       copilot: '--yolo',
       grok: '--permission-mode bypassPermissions'

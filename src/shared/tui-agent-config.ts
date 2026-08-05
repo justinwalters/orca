@@ -141,12 +141,6 @@ export const TUI_AGENT_CONFIG: Record<TuiAgent, TuiAgentConfig> = {
     promptInjectionMode: 'argv',
     draftPromptEnvVar: 'ORCA_OMP_PREFILL'
   },
-  gemini: {
-    detectCmd: 'gemini',
-    launchCmd: 'gemini',
-    expectedProcess: 'gemini',
-    promptInjectionMode: 'flag-prompt-interactive'
-  },
   antigravity: {
     detectCmd: 'agy',
     launchCmd: 'agy',

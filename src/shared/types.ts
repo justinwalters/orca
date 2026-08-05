@@ -2599,7 +2599,6 @@ export type TuiAgent =
   | 'mimo-code'
   | 'pi' // Pi (pi.dev)
   | 'omp' // OMP (omp.sh)
-  | 'gemini' // Gemini CLI
   | 'antigravity' // Google Antigravity CLI
   | 'aider' // Aider
   | 'goose' // Goose
@@ -3008,8 +3007,6 @@ export type GlobalSettings = {
   minimaxGroupId: string
   /** Comma-separated MiniMax model names to show in the status bar usage window. */
   minimaxUsageModels: string
-  /** Extract OAuth credentials from the local Gemini CLI for rate-limit fetching. Off by default (explicit opt-in). */
-  geminiCliOAuthEnabled: boolean
   /** Per-agent CLI command overrides. A missing key means use the catalog default binary name. */
   agentCmdOverrides: Partial<Record<TuiAgent, string>>
   /** Custom CODEX_HOME for Codex session-history discovery (defaults to ~/.codex).
@@ -3306,8 +3303,6 @@ export type AgentActivityDisplayMode = 'compact' | 'full'
 export type StatusBarItem =
   | 'claude'
   | 'codex'
-  | 'gemini'
-  | 'antigravity'
   | 'opencode-go'
   | 'kimi'
   | 'minimax'
@@ -3440,8 +3435,6 @@ export type PersistedUIState = {
   _kimiStatusBarDefaultAdded?: boolean
   /** One-shot migration flag for adding the default-on MiniMax status item. */
   _minimaxStatusBarDefaultAdded?: boolean
-  /** One-shot migration flag for adding the default-on Antigravity status item. */
-  _antigravityStatusBarDefaultAdded?: boolean
   /** One-shot migration flag for adding the default-on Grok status item. */
   _grokStatusBarDefaultAdded?: boolean
   statusBarItems: StatusBarItem[]

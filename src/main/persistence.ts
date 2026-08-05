@@ -156,6 +156,7 @@ import {
   setMigrationUnsupportedPtyPersistenceListener
 } from './agent-hooks/migration-unsupported-pty-state'
 import { agentHookServer } from './agent-hooks/server'
+import { cleanRetiredAgentReferences } from './retired-agent-settings-cleanup'
 import { pruneLocalTerminalScrollbackBuffers } from '../shared/workspace-session-terminal-buffers'
 import {
   backfillAutomationRunNumbers,
@@ -3105,6 +3106,11 @@ export class Store {
           .map((record) => ({ ...record, ownerLease: decrypt(record.ownerLease) }))
           .map((record) => normalizeSshPtyConsumerRecovery(record))
           .filter((record): record is SshPtyConsumerRecovery => record !== null)
+
+        // Why: must run before the defaults merge so no migration below reads a retired agent id.
+        if (cleanRetiredAgentReferences(parsed)) {
+          this.loadNeedsSave = true
+        }
 
         // Merge with defaults in case new fields were added
         const homeDir = homedir()

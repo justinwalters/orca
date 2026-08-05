@@ -51,7 +51,7 @@ describe('decideInitialAgentTabViewMode', () => {
       decideInitialAgentTabViewMode({
         experimentalNativeChat: true,
         openAgentTabsInChatByDefault: true,
-        agent: 'gemini'
+        agent: 'aider'
       })
     ).toBeUndefined()
   })

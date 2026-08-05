@@ -4,10 +4,6 @@ import {
   CLAUDE_IDLE,
   CURSOR_NATIVE_TITLE_LOWER,
   DROID_AGENT_NAME_RE,
-  GEMINI_IDLE,
-  GEMINI_PERMISSION,
-  GEMINI_SILENT_WORKING,
-  GEMINI_WORKING,
   HERMES_AGENT_NAME_RE,
   STRONG_IDLE_KEYWORDS_RE,
   STRONG_WORKING_KEYWORDS_RE,
@@ -17,7 +13,6 @@ import {
   containsBrailleSpinner,
   containsLegacyAgentName,
   isClaudeManagementTitle,
-  isGeminiTerminalTitle,
   isPiAgentTitle,
   isPiTerminalTitle
 } from './agent-title-core'
@@ -31,8 +26,6 @@ import { isGrokRotatingWorkingTitle } from './terminal-title-agent-type'
 export function clearWorkingIndicators(title: string): string {
   let cleaned = title
 
-  cleaned = cleaned.replace(GEMINI_WORKING, '')
-  cleaned = cleaned.replace(GEMINI_SILENT_WORKING, '')
   cleaned = cleaned.replace(BRAILLE_SPINNER_RE, '')
   if (cleaned.startsWith('. ')) {
     cleaned = cleaned.slice(2)
@@ -113,19 +106,6 @@ export function normalizeTerminalTitle(title: string): string {
     return title
   }
 
-  if (isGeminiTerminalTitle(title)) {
-    const status = detectAgentStatusFromTitle(title)
-    if (status === 'permission') {
-      return `${GEMINI_PERMISSION} Gemini CLI`
-    }
-    if (status === 'working') {
-      return `${GEMINI_WORKING} Gemini CLI`
-    }
-    if (status === 'idle') {
-      return `${GEMINI_IDLE} Gemini CLI`
-    }
-  }
-
   // Why: Pi animates every 80ms; collapse frames while preserving status.
   if (isPiAgentTitle(title)) {
     const status = detectAgentStatusFromTitle(title)
@@ -154,16 +134,6 @@ export function detectAgentStatusFromTitle(title: string): AgentStatus | null {
   }
   if (title.trim().toLowerCase() === CURSOR_NATIVE_TITLE_LOWER) {
     return null
-  }
-
-  if (title.includes(GEMINI_PERMISSION)) {
-    return 'permission'
-  }
-  if (title.includes(GEMINI_WORKING) || title.includes(GEMINI_SILENT_WORKING)) {
-    return 'working'
-  }
-  if (title.includes(GEMINI_IDLE)) {
-    return 'idle'
   }
 
   // Why: resolve synthetic Pi/OMP permission/idle labels before the broader

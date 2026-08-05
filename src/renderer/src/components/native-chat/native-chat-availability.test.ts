@@ -102,13 +102,13 @@ describe('canToggleNativeChat', () => {
     ).toBe(true)
   })
 
-  it('rejects an unsupported agent detected live (Gemini)', () => {
+  it('rejects an unsupported agent detected live (Aider)', () => {
     expect(
       canToggleNativeChat({
         experimentalNativeChatEnabled: true,
         contentType: 'terminal',
         launchAgent: null,
-        detectedAgent: 'gemini'
+        detectedAgent: 'aider'
       })
     ).toBe(false)
   })
@@ -131,7 +131,7 @@ describe('canToggleNativeChat', () => {
         experimentalNativeChatEnabled: true,
         contentType: 'terminal',
         launchAgent: null,
-        detectedAgent: 'gemini',
+        detectedAgent: 'aider',
         resolvedAgent: 'codex'
       })
     ).toBe(false)
@@ -143,7 +143,7 @@ describe('canToggleNativeChat', () => {
         experimentalNativeChatEnabled: true,
         contentType: 'terminal',
         launchAgent: 'codex',
-        detectedAgent: 'gemini'
+        detectedAgent: 'aider'
       })
     ).toBe(false)
   })
@@ -153,7 +153,7 @@ describe('canToggleNativeChat', () => {
       canToggleNativeChat({
         experimentalNativeChatEnabled: true,
         contentType: 'terminal',
-        launchAgent: 'gemini',
+        launchAgent: 'aider',
         resolvedAgent: 'claude'
       })
     ).toBe(false)
