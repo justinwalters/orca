@@ -21,6 +21,23 @@ export function cleanElectronUserAgent(ua: string): string {
   )
 }
 
+// Why: Chromium majors passed 80 in 2020; Arc-style marketing versions ("1.104.0")
+// fail this floor, and a UA built from one gets the browser flagged as ancient.
+const MIN_PLAUSIBLE_CHROMIUM_MAJOR = 80
+
+export function isPlausibleChromiumUaVersion(version: string): boolean {
+  const major = Number(version.split('.')[0])
+  return Number.isInteger(major) && major >= MIN_PLAUSIBLE_CHROMIUM_MAJOR
+}
+
+// Why: imports before STA-3514 persisted UAs built from the source browser's
+// marketing version (Arc → "Chrome/1.104.0"); reapplying them at startup keeps
+// sites marking the browser incompatible.
+export function isImplausiblePersistedUserAgent(ua: string): boolean {
+  const chromeMatch = ua.match(/Chrome\/([\d.]+)/)
+  return chromeMatch ? !isPlausibleChromiumUaVersion(chromeMatch[1]) : false
+}
+
 // Why: Electron's actual Chromium version (e.g. 134) differs from the source
 // browser's version (e.g. Edge 147). The sec-ch-ua Client Hints headers
 // reveal the real version, creating a mismatch that Google's anti-fraud

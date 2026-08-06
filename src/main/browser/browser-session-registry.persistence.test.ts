@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type * as browserSessionUaModule from './browser-session-ua'
 
 const USER_DATA = '/user-data'
 const META_PATH = `${USER_DATA}/browser-session-meta.json`
@@ -118,10 +119,14 @@ function installModuleMocks(
     hasSystemMediaAccess: vi.fn(() => true),
     requestSystemMediaAccess: requestSystemMediaAccessMock
   }))
-  vi.doMock('./browser-session-ua', () => ({
-    cleanElectronUserAgent: vi.fn((ua: string) => ua.replace(/\s*Electron\/\S+/, '')),
-    setupClientHintsOverride: setupClientHintsOverrideMock
-  }))
+  vi.doMock('./browser-session-ua', async () => {
+    const actual = await vi.importActual<typeof browserSessionUaModule>('./browser-session-ua')
+    return {
+      ...actual,
+      cleanElectronUserAgent: vi.fn((ua: string) => ua.replace(/\s*Electron\/\S+/, '')),
+      setupClientHintsOverride: setupClientHintsOverrideMock
+    }
+  })
 
   return {
     sessionFromPartitionMock,
@@ -402,6 +407,69 @@ describe('BrowserSessionRegistry persistence', () => {
       importedSessions.every(
         (session) => getBrowserSessionUserAgentMode(session as never) === 'native'
       )
+    ).toBe(true)
+  })
+
+  // Why: pre-STA-3514 Arc imports persisted a UA built from Arc's marketing
+  // version ("Chrome/1.104.0"); reapplying it kept sites rejecting the browser.
+  it('drops a persisted Chrome/1.x UA on restore and falls back to the clean default', async () => {
+    const badUa =
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/1.104.0 Safari/537.36'
+    const fsState = createFsState()
+    seedMeta(fsState, {
+      defaultSource: { browserFamily: 'arc', importedAt: 1 },
+      userAgent: badUa,
+      userAgentByPartition: { 'persist:orca-browser': badUa },
+      pendingCookieDbPath: null,
+      pendingCookieImports: {},
+      profiles: []
+    })
+
+    const { sessionFromPartitionMock, setupClientHintsOverrideMock } = installModuleMocks(fsState)
+    const { browserSessionRegistry } = await import('./browser-session-registry')
+
+    browserSessionRegistry.initializeBrowserSessionsFromPersistedState()
+
+    const defaultSessions = sessionFromPartitionMock.mock.results
+      .filter((_, idx) => sessionFromPartitionMock.mock.calls[idx]?.[0] === 'persist:orca-browser')
+      .map((r) => r.value)
+    expect(defaultSessions.length).toBeGreaterThan(0)
+    const setUaCalls = defaultSessions.flatMap((s) =>
+      s.setUserAgent.mock.calls.map((c: unknown[]) => c[0])
+    )
+    expect(setUaCalls).not.toContain(badUa)
+    expect(setUaCalls).toContain('Mozilla/5.0 Orca')
+    expect(setupClientHintsOverrideMock.mock.calls.every((c: unknown[]) => c[1] !== badUa)).toBe(
+      true
+    )
+
+    const written = JSON.parse(fsState.files.get(META_PATH) ?? '{}')
+    expect(written.userAgentByPartition ?? {}).not.toHaveProperty('persist:orca-browser')
+  })
+
+  it('still applies a persisted UA with a modern Chrome version on restore', async () => {
+    const goodUa =
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.6478.127 Safari/537.36'
+    const fsState = createFsState()
+    seedMeta(fsState, {
+      defaultSource: { browserFamily: 'arc', importedAt: 1 },
+      userAgent: goodUa,
+      userAgentByPartition: { 'persist:orca-browser': goodUa },
+      pendingCookieDbPath: null,
+      pendingCookieImports: {},
+      profiles: []
+    })
+
+    const { sessionFromPartitionMock } = installModuleMocks(fsState)
+    const { browserSessionRegistry } = await import('./browser-session-registry')
+
+    browserSessionRegistry.initializeBrowserSessionsFromPersistedState()
+
+    const defaultSessions = sessionFromPartitionMock.mock.results
+      .filter((_, idx) => sessionFromPartitionMock.mock.calls[idx]?.[0] === 'persist:orca-browser')
+      .map((r) => r.value)
+    expect(
+      defaultSessions.some((s) => s.setUserAgent.mock.calls.some((c: unknown[]) => c[0] === goodUa))
     ).toBe(true)
   })
 

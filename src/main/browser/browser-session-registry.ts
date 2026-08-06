@@ -25,7 +25,11 @@ import type {
 } from '../../shared/types'
 import { browserManager } from './browser-manager'
 import { hasSystemMediaAccess, requestSystemMediaAccess } from './browser-media-access'
-import { cleanElectronUserAgent, setupClientHintsOverride } from './browser-session-ua'
+import {
+  cleanElectronUserAgent,
+  isImplausiblePersistedUserAgent,
+  setupClientHintsOverride
+} from './browser-session-ua'
 import {
   clearBrowserSessionUserAgentMode,
   setBrowserSessionUserAgentMode
@@ -197,12 +201,17 @@ class BrowserSessionRegistry {
         const userAgentMode = profile.userAgentMode ?? 'clean'
         setBrowserSessionUserAgentMode(sess, userAgentMode)
         const persistedUa = meta.userAgentByPartition[partition]
-        if (persistedUa) {
+        if (persistedUa && !isImplausiblePersistedUserAgent(persistedUa)) {
           sess.setUserAgent(persistedUa)
           setupClientHintsOverride(sess, persistedUa, {
             googleAuthOverride: userAgentMode !== 'native'
           })
           continue
+        }
+        if (persistedUa) {
+          // Why: pre-STA-3514 Arc imports persisted a Chrome/1.x marketing-version UA;
+          // purge it so the clean default UA takes over instead of re-poisoning the session.
+          this.persistUserAgent(partition, null)
         }
 
         if (profile.userAgentMode === 'native') {

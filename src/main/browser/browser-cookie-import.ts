@@ -75,7 +75,7 @@ import type {
 } from '../../shared/types'
 import { browserSessionRegistry } from './browser-session-registry'
 import { getBrowserSessionUserAgentMode } from './browser-session-user-agent-mode'
-import { setupClientHintsOverride } from './browser-session-ua'
+import { isPlausibleChromiumUaVersion, setupClientHintsOverride } from './browser-session-ua'
 import {
   isGoogleSourceBoundCookie,
   normalizeCookieDomain,
@@ -804,31 +804,62 @@ export function getUserAgentForBrowser(
     }
   }
 
+  // Why: forks like Arc version their bundle with a marketing number ("1.104.0"),
+  // so a UA built from the plist reads as Chrome 1 and sites reject the browser
+  // as ancient (STA-3514). Chromium records the version its own UA advertised in
+  // <User Data>/Last Version — fall back to it, and never emit an implausible UA.
+  function resolveChromiumUaVersion(
+    appPath: string,
+    uaFamily: BrowserSessionProfileSource['browserFamily']
+  ): string | null {
+    const plistVersion = readBrowserVersion(appPath)
+    if (!plistVersion) {
+      return null
+    }
+    if (isPlausibleChromiumUaVersion(plistVersion)) {
+      return plistVersion
+    }
+    const def = CHROMIUM_BROWSERS.find((b) => b.family === uaFamily)
+    const root = def ? browserRootPath(def) : null
+    if (!root) {
+      return null
+    }
+    try {
+      const lastVersion = readFileSync(join(root, 'Last Version'), 'utf-8').trim()
+      if (/^\d+(\.\d+){3}$/.test(lastVersion) && isPlausibleChromiumUaVersion(lastVersion)) {
+        return lastVersion
+      }
+    } catch {
+      /* missing or unreadable — treat as no version */
+    }
+    return null
+  }
+
   switch (family) {
     case 'chrome': {
-      const v = readBrowserVersion('/Applications/Google Chrome.app')
+      const v = resolveChromiumUaVersion('/Applications/Google Chrome.app', family)
       return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36` : null
     }
     case 'edge': {
-      const v = readBrowserVersion('/Applications/Microsoft Edge.app')
+      const v = resolveChromiumUaVersion('/Applications/Microsoft Edge.app', family)
       return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36 Edg/${v}` : null
     }
     case 'arc': {
-      const v = readBrowserVersion('/Applications/Arc.app')
+      const v = resolveChromiumUaVersion('/Applications/Arc.app', family)
       return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36` : null
     }
     case 'chromium': {
-      const v = readBrowserVersion('/Applications/Brave Browser.app')
+      const v = resolveChromiumUaVersion('/Applications/Brave Browser.app', family)
       return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36` : null
     }
     case 'comet': {
       // Why: Comet is Chromium-based; use Chrome's UA shape so Google-bound auth cookies survive import.
-      const v = readBrowserVersion('/Applications/Comet.app')
+      const v = resolveChromiumUaVersion('/Applications/Comet.app', family)
       return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36` : null
     }
     case 'helium': {
       // Why: Helium is Chromium-based; use Chrome's UA shape so Google-bound auth cookies survive import.
-      const v = readBrowserVersion('/Applications/Helium.app')
+      const v = resolveChromiumUaVersion('/Applications/Helium.app', family)
       return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36` : null
     }
     case 'firefox':
