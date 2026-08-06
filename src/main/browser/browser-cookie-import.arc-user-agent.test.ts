@@ -20,13 +20,22 @@ function slashPath(pathValue: string): string {
 // Why: Arc's CFBundleShortVersionString is its marketing version ("1.104.0"),
 // not the embedded Chromium version — a UA built from it reads as Chrome 1 and
 // sites mark the browser incompatible (STA-3514).
-function mockArcPlistVersion(version: string): void {
+function mockArcPlistVersion(version: string, arcCoreVersion: string | null = null): void {
   vi.doMock('node:child_process', async () => {
     const actual = await vi.importActual<typeof childProcessModule>('node:child_process')
     return {
       ...actual,
       execFileSync: (cmd: string, args: readonly string[]) => {
-        if (cmd === 'defaults' && args[1]?.includes('/Applications/Arc.app/Contents/Info')) {
+        if (cmd !== 'defaults') {
+          throw new Error(`unexpected command: ${cmd}`)
+        }
+        if (args[1]?.includes('ArcCore.framework')) {
+          if (arcCoreVersion === null) {
+            throw new Error('defaults: domain not found')
+          }
+          return `${arcCoreVersion}\n`
+        }
+        if (args[1]?.includes('/Applications/Arc.app/Contents/Info')) {
           return `${version}\n`
         }
         throw new Error('defaults: domain not found')
@@ -67,6 +76,18 @@ describe('getUserAgentForBrowser — Arc (STA-3514)', () => {
     Object.defineProperty(process, 'platform', { value: originalPlatform })
     process.env.HOME = originalHome
     vi.restoreAllMocks()
+  })
+
+  it('prefers the embedded ArcCore Chromium version over the marketing version', async () => {
+    mockArcPlistVersion('1.158.1', '151.0.7922.72')
+    mockArcLastVersion(null)
+
+    const { getUserAgentForBrowser } = await import('./browser-cookie-import')
+    const ua = getUserAgentForBrowser('arc')
+
+    expect(ua).not.toBeNull()
+    expect(ua).not.toContain('Chrome/1.158.1')
+    expect(ua).toContain('Chrome/151.0.7922.72')
   })
 
   it('never builds a Chrome/1.x UA from Arc marketing version; uses User Data Last Version', async () => {

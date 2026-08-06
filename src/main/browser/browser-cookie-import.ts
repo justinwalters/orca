@@ -788,13 +788,13 @@ export function getUserAgentForBrowser(
   const platform = 'Macintosh; Intel Mac OS X 10_15_7'
   const chromeBase = 'AppleWebKit/537.36 (KHTML, like Gecko)'
 
-  function readBrowserVersion(
-    appPath: string,
+  function readInfoPlistVersion(
+    infoDomain: string,
     plistKey = 'CFBundleShortVersionString'
   ): string | null {
     try {
       return (
-        execFileSync('defaults', ['read', `${appPath}/Contents/Info`, plistKey], {
+        execFileSync('defaults', ['read', infoDomain, plistKey], {
           encoding: 'utf-8',
           timeout: 5_000
         }).trim() || null
@@ -806,18 +806,26 @@ export function getUserAgentForBrowser(
 
   // Why: forks like Arc version their bundle with a marketing number ("1.104.0"),
   // so a UA built from the plist reads as Chrome 1 and sites reject the browser
-  // as ancient (STA-3514). Chromium records the version its own UA advertised in
-  // <User Data>/Last Version — fall back to it, and never emit an implausible UA.
+  // as ancient (STA-3514). Prefer the fork's embedded-Chromium plist when known,
+  // then Chromium's own <User Data>/Last Version record — never emit an
+  // implausible UA.
   function resolveChromiumUaVersion(
     appPath: string,
-    uaFamily: BrowserSessionProfileSource['browserFamily']
+    uaFamily: BrowserSessionProfileSource['browserFamily'],
+    embeddedChromiumInfoDomain?: string
   ): string | null {
-    const plistVersion = readBrowserVersion(appPath)
+    const plistVersion = readInfoPlistVersion(`${appPath}/Contents/Info`)
     if (!plistVersion) {
       return null
     }
     if (isPlausibleChromiumUaVersion(plistVersion)) {
       return plistVersion
+    }
+    if (embeddedChromiumInfoDomain) {
+      const embedded = readInfoPlistVersion(embeddedChromiumInfoDomain)
+      if (embedded && isPlausibleChromiumUaVersion(embedded)) {
+        return embedded
+      }
     }
     const def = CHROMIUM_BROWSERS.find((b) => b.family === uaFamily)
     const root = def ? browserRootPath(def) : null
@@ -845,7 +853,12 @@ export function getUserAgentForBrowser(
       return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36 Edg/${v}` : null
     }
     case 'arc': {
-      const v = resolveChromiumUaVersion('/Applications/Arc.app', family)
+      const v = resolveChromiumUaVersion(
+        '/Applications/Arc.app',
+        family,
+        // Why: Arc keeps the real Chromium version in ArcCore's plist (Arc 1.158.1 → 151.0.7922.72).
+        '/Applications/Arc.app/Contents/Frameworks/ArcCore.framework/Versions/A/Resources/Info'
+      )
       return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36` : null
     }
     case 'chromium': {
