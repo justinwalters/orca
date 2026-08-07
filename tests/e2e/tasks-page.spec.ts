@@ -49,6 +49,60 @@ async function getRenderedTaskSources(
     }, TASK_SOURCE_BY_LABEL)
 }
 
+async function openMockedPaginatedGitHubTasks(
+  page: Parameters<typeof getStoreState>[0]
+): Promise<void> {
+  await page.evaluate(() => {
+    const store = window.__store
+    if (!store) {
+      throw new Error('window.__store is not available')
+    }
+    const repos = store.getState().repos.map((repo, index) =>
+      index === 0
+        ? {
+            ...repo,
+            gitRemoteIdentity: {
+              canonicalKey: 'github.com/example/repo',
+              remoteName: 'origin',
+              remoteUrl: 'https://github.com/example/repo.git'
+            }
+          }
+        : repo
+    )
+    const makePage = (pageNumber: number) =>
+      Array.from({ length: 30 }, (_, index) => ({
+        id: `issue-${pageNumber}-${index + 1}`,
+        type: 'issue' as const,
+        number: pageNumber * 100 + index + 1,
+        title: `Issue page ${pageNumber} item ${index + 1}`,
+        state: 'open' as const,
+        url: `https://github.com/example/repo/issues/${pageNumber * 100 + index + 1}`,
+        labels: [],
+        updatedAt: new Date(1_700_000_000_000 - index * 1_000).toISOString(),
+        author: 'octocat',
+        repoId: repos[0]?.id ?? 'repo-1'
+      }))
+
+    store.setState({
+      repos,
+      getCachedWorkItems: () => makePage(1),
+      prefetchWorkItems: () => {},
+      fetchWorkItemsAcrossRepos: async () => ({
+        items: makePage(1),
+        failedCount: 0,
+        githubUnavailable: false
+      }),
+      fetchWorkItemsNextPage: async (_repos, _perRepoLimit, _displayLimit, _query, pageNumber) => ({
+        items: makePage(pageNumber),
+        failedCount: 0,
+        errorTypes: []
+      }),
+      countWorkItemsAcrossRepos: async () => ({ totalCount: 840, totalPages: 28 })
+    })
+    store.getState().openTaskPage({ taskSource: 'github' })
+  })
+}
+
 test.describe('Tasks page', () => {
   test.beforeEach(async ({ orcaPage }) => {
     await waitForSessionReady(orcaPage)
@@ -128,5 +182,47 @@ test.describe('Tasks page', () => {
     if (previousView === 'terminal') {
       await expect(orcaPage.locator('.xterm').first()).toBeVisible({ timeout: 5_000 })
     }
+  })
+
+  test('reopening restores the GitHub page and scroll position', async ({ orcaPage }) => {
+    await openMockedPaginatedGitHubTasks(orcaPage)
+
+    await orcaPage.getByRole('button', { name: 'Page 28', exact: true }).click()
+    await expect(orcaPage.getByText('Issue page 28 item 1', { exact: true })).toBeVisible()
+
+    const list = orcaPage.locator('[data-task-list-scroll="github"]')
+    await list.evaluate((element) => {
+      element.scrollTop = 360
+      element.dispatchEvent(new Event('scroll'))
+    })
+    await expect.poll(() => list.evaluate((element) => element.scrollTop)).toBeGreaterThan(300)
+
+    await orcaPage.getByRole('button', { name: 'Close tasks' }).click()
+    await expect(list).toHaveCount(0)
+    await openTasksPage(orcaPage)
+
+    await expect(orcaPage.getByRole('button', { name: 'Page 28', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+    await expect(orcaPage.getByText('Issue page 28 item 1', { exact: true })).toBeVisible()
+    const restoredList = orcaPage.locator('[data-task-list-scroll="github"]')
+    await expect
+      .poll(() => restoredList.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(300)
+
+    await orcaPage.getByText('Issue page 28 item 12', { exact: true }).click()
+    await expect(restoredList).toHaveCount(0)
+    await expect
+      .poll(async () => {
+        const position = await getStoreState<{ scrollTop: number }>(orcaPage, 'taskListPosition')
+        return position.scrollTop
+      })
+      .toBeGreaterThan(300)
+    await orcaPage.getByRole('button', { name: 'GitHub list', exact: true }).click()
+    await expect(orcaPage.getByText('Issue page 28 item 1', { exact: true })).toBeVisible()
+    await expect
+      .poll(() => restoredList.evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(300)
   })
 })
