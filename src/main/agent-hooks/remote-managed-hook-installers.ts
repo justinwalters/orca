@@ -13,6 +13,7 @@ import { grokHookService } from '../grok/hook-service'
 import { hermesHookService } from '../hermes/hook-service'
 import { kimiHookService } from '../kimi/hook-service'
 import { openClaudeHookService } from '../openclaude/hook-service'
+import { removeRetiredGeminiManagedHooksRemote } from './retired-gemini-hook-cleanup'
 
 export type RemoteManagedHookInstallOptions = {
   /** Explicit CODEX_HOME dir for redirected runtimes (WSL managed runtime
@@ -79,6 +80,12 @@ export async function installRemoteManagedAgentHooks(
   remoteHome: string,
   options?: RemoteManagedHookInstallOptions
 ): Promise<AgentHookInstallStatus[]> {
+  // Why: strip retired Gemini CLI hooks on remote homes the same way as local.
+  try {
+    await removeRetiredGeminiManagedHooksRemote(sftp, remoteHome)
+  } catch (error) {
+    console.warn('[agent-hooks] Failed to clean retired remote Gemini managed hooks:', error)
+  }
   const results: AgentHookInstallStatus[] = []
   const allowedAgents = options?.agents ? new Set(options.agents) : null
   for (const [agent, install] of REMOTE_MANAGED_HOOK_INSTALLERS) {

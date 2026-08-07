@@ -80,7 +80,12 @@ export async function installManagedHooks(options?: {
 }): Promise<ManagedHookInstallSummary> {
   options?.signal?.throwIfAborted()
   const home = homedir()
-  const grokHomeDir = await resolveRelayGrokHome(home, options?.signal)
+  // Why: an empty allowlist installs nothing (the request only carries retired-agent
+  // cleanup), so skip the login-shell GROK_HOME probe that install would need.
+  const grokHomeDir =
+    options?.agents?.length === 0
+      ? defaultGrokHome(home)
+      : await resolveRelayGrokHome(home, options?.signal)
   options?.signal?.throwIfAborted()
   const hostIdentity = scopeManagedHookHostIdentity(
     await readManagedHookHostIdentity(),

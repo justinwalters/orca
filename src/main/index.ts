@@ -257,6 +257,8 @@ import { setUnreadDockBadgeCount } from './dock/unread-badge'
 import { AutomationService } from './automations/service'
 import { createHeadlessAutomationOutputSnapshotBuffer } from './automations/headless-dispatch'
 import { buildHeadlessAutomationWorktreeCreateArgs } from './automations/headless-workspace-create'
+import { AUTOMATION_MISSING_AGENT_MESSAGE } from '../shared/automations-types'
+import { isTuiAgent } from '../shared/tui-agent-config'
 import { AgentAwakeService } from './agent-awake-service'
 import { registerSystemResumeBroadcast } from './system-resume-broadcast'
 import { settleTeardownWithinDeadline } from './quit-teardown-deadline'
@@ -2413,6 +2415,12 @@ void app.whenReady().then(async () => {
     allowRemoteHostScheduling: isServeMode,
     headlessDispatcher: isServeMode
       ? async ({ automation, run, target }) => {
+          // Why: the service already skips agentless runs; this keeps the launch
+          // paths below narrowed to a real agent instead of guarding each one.
+          const agentId = automation.agentId
+          if (!isTuiAgent(agentId)) {
+            throw new Error(AUTOMATION_MISSING_AGENT_MESSAGE)
+          }
           const terminalSnapshotLimit = 2_000
           let terminalHandle: string
           let terminalSessionId: string | null = null
@@ -2425,6 +2433,7 @@ void app.whenReady().then(async () => {
             const created = await runtimeService.createManagedWorktree({
               ...buildHeadlessAutomationWorktreeCreateArgs({
                 automation,
+                agentId,
                 run,
                 repo: target.repo
               })
@@ -2448,7 +2457,7 @@ void app.whenReady().then(async () => {
             const terminal = await runtimeService.launchAgentTerminal(
               `id:${automation.workspaceId}`,
               {
-                agent: automation.agentId,
+                agent: agentId,
                 prompt: automation.prompt,
                 title: run.title
               }

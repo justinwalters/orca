@@ -14206,6 +14206,11 @@
               "name": "Hourly maintenance check",
               "prompt": "Check for stuck work, stale generated files, failing validation, and anything that needs human attention. Report only actionable issues."
             }
+          },
+          "draft": {
+            "model": {
+              "a0f61bd7c9": "No agent"
+            }
           }
         },
         "external": {

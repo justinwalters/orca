@@ -94,10 +94,8 @@ vi.mock('./terminal-webgl-atlas-recovery', () => ({
 
 vi.mock('@/lib/agent-status', async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>()
-  const isGeminiTerminalTitle = actual.isGeminiTerminalTitle as (title: string) => boolean
   return {
     ...actual,
-    isGeminiTerminalTitle: vi.fn((title: string) => isGeminiTerminalTitle(title)),
     isClaudeAgent: vi.fn(() => false),
     detectAgentStatusFromTitle: vi.fn(() => null)
   }

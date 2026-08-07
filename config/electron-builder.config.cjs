@@ -167,7 +167,6 @@ module.exports = {
     'out/main/copilot/**',
     'out/main/cursor/**',
     'out/main/droid/**',
-    'out/main/gemini/**',
     'out/main/grok/**',
     'out/main/hermes/**',
     'out/main/daemon-entry.js',
