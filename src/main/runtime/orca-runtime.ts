@@ -2899,6 +2899,10 @@ export class OrcaRuntimeService {
   >()
   private worktreeLifecycleListeners = new Set<(event: RuntimeWorktreeLifecycleEvent) => void>()
   private forkBackfillStarted = false
+  // Why: one chain keeps every backfill pass sequential, so a burst of SSH
+  // connects can never fan out `gh repo view` calls past the shared semaphore.
+  private forkUpstreamBackfillQueue: Promise<void> = Promise.resolve()
+  private forkUpstreamBackfilledConnectionIds = new Set<string>()
   private agentBrowserBridge: AgentBrowserBridge | null = null
   private offscreenBrowserBackend: BrowserBackend | null = null
   private emulatorBridge: EmulatorBridge | null = null
@@ -5217,6 +5221,8 @@ export class OrcaRuntimeService {
     this.invalidateSshWorktreeScanCache(targetId)
     if (state.status !== 'connected') {
       this.cancelLegacyWorkerTerminalRecoveryRetry(`ssh:${targetId}`)
+    } else {
+      this.backfillForkUpstreamsForConnection(targetId)
     }
     this.emitClientEvent({ type: 'sshStateChanged', targetId, state: getPublicSshState(state)! })
   }
@@ -10804,10 +10810,7 @@ export class OrcaRuntimeService {
     // A spawn published (or admission pending) this generation already
     // attaches the provider stream; a replacement under a reused id must not
     // read as the discovered never-attached session it replaced.
-    if (
-      this.spawnPublishedPtys.has(ptyId) ||
-      this.pendingPtyRegistrationIncarnations.has(ptyId)
-    ) {
+    if (this.spawnPublishedPtys.has(ptyId) || this.pendingPtyRegistrationIncarnations.has(ptyId)) {
       return false
     }
     // SSH panes have their own lease/reattach machinery.
@@ -19168,22 +19171,66 @@ export class OrcaRuntimeService {
   }
 
   // Why: repos added before fork detection existed have no stored `upstream`, so
-  // their avatar/badge would never self-correct. Resolve it once at startup for
-  // local git repos; SSH repos resolve lazily when their settings open (their
-  // connection may not be up yet). Sequential to respect the gh rate limit;
-  // failures leave `upstream` unset so the next launch retries.
-  private async backfillForkUpstreams(): Promise<void> {
+  // their avatar/badge/project rows would never self-correct. Resolve it once at
+  // startup for repos whose host is already reachable; SSH repos wait for their
+  // connection instead (their host may not be up yet).
+  private backfillForkUpstreams(): Promise<boolean> {
+    return this.queueForkUpstreamBackfill((repo) => !repo.connectionId)
+  }
+
+  // Why: an SSH fork used to stay `upstream === undefined` until someone opened
+  // its settings page, hiding it from project rows and from the fork badge with
+  // no visible cause (#12967). Connect is the first moment the probe can succeed.
+  // Fire-and-forget so nothing on the connection path waits on the network.
+  private backfillForkUpstreamsForConnection(connectionId: string): void {
+    if (this.forkUpstreamBackfilledConnectionIds.has(connectionId)) {
+      return
+    }
+    this.forkUpstreamBackfilledConnectionIds.add(connectionId)
+    void this.queueForkUpstreamBackfill((repo) => repo.connectionId === connectionId)
+      .then((complete) => {
+        // Why: a pass interrupted by a probe failure left `upstream` unset, so let
+        // the next connect retry rather than stranding it until the app restarts.
+        if (!complete) {
+          this.forkUpstreamBackfilledConnectionIds.delete(connectionId)
+        }
+      })
+      .catch(() => {
+        this.forkUpstreamBackfilledConnectionIds.delete(connectionId)
+      })
+  }
+
+  // Why: chained, never concurrent — `getRepoUpstream` shells out to `gh` behind a
+  // process-global semaphore, so passes queue instead of fanning out.
+  private queueForkUpstreamBackfill(selects: (repo: Repo) => boolean): Promise<boolean> {
+    const pass = this.forkUpstreamBackfillQueue.then(() => this.runForkUpstreamBackfill(selects))
+    this.forkUpstreamBackfillQueue = pass.then(
+      () => undefined,
+      () => undefined
+    )
+    return pass
+  }
+
+  /** Resolves false when any probe failed, so the caller can retry that scope later. */
+  private async runForkUpstreamBackfill(selects: (repo: Repo) => boolean): Promise<boolean> {
+    let complete = true
     try {
       const store = this.requireStore()
       let changed = false
       for (const repo of store.getRepos()) {
-        if (repo.upstream !== undefined || repo.kind === 'folder' || repo.connectionId) {
+        if (repo.upstream !== undefined || repo.kind === 'folder' || !selects(repo)) {
           continue
         }
         let upstream: GitHubOwnerRepo | null
         try {
-          upstream = await getRepoUpstream(repo.path, null)
+          // Why: same resolution the settings page uses, so backfilled and
+          // lazily-resolved upstreams can never disagree for the same repo.
+          const options = this.getHostedReviewExecutionOptions(repo)
+          upstream = await (options
+            ? getRepoUpstream(repo.path, repo.connectionId ?? null, options)
+            : getRepoUpstream(repo.path, repo.connectionId ?? null))
         } catch {
+          complete = false
           continue
         }
         const updates: Partial<Repo> = { upstream: upstream ?? null }
@@ -19197,8 +19244,10 @@ export class OrcaRuntimeService {
       if (changed) {
         this.notifyReposChanged()
       }
+      return complete
     } catch {
-      // Best-effort startup backfill; never disrupt launch.
+      // Best-effort; never disrupt launch or a connection.
+      return false
     }
   }
 
