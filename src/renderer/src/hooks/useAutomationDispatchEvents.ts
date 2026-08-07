@@ -32,6 +32,7 @@ import {
   toSshExecutionHostId
 } from '../../../shared/execution-host'
 import { parseWorkspaceKey } from '../../../shared/workspace-scope'
+import { isTuiAgent } from '../../../shared/tui-agent-config'
 import { getFolderWorkspaceConnectionId } from '@/lib/folder-workspace-connection'
 
 const AUTOMATIONS_CHANGED_EVENT = 'orca:automations-changed'
@@ -95,9 +96,10 @@ export function useAutomationDispatchEvents(): void {
         }
 
         const agentId = automation.agentId
-        if (!agentId) {
+        if (!isTuiAgent(agentId)) {
           // Why: the host already skips agentless runs; this covers an older host
-          // dispatching an automation a retired-agent cleanup has since cleared.
+          // dispatching an automation whose agent is missing or retired — bail out
+          // before any workspace is created for a launch that cannot succeed.
           await markDispatchResult({
             runId: run.id,
             status: 'skipped_unavailable',

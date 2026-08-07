@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CalendarClock, Plus, RefreshCw, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { filterEnabledTuiAgents, isTuiAgentEnabled } from '../../../../shared/tui-agent-selection'
+import { isTuiAgent } from '../../../../shared/tui-agent-config'
 import { Button } from '@/components/ui/button'
 import { installWindowVisibilityInterval } from '@/lib/window-visibility-interval'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -1494,8 +1495,9 @@ export default function AutomationsPage(): React.JSX.Element {
   }
 
   const toggleAutomation = async (automation: Automation): Promise<void> => {
-    // Why: resuming without an agent would only schedule runs that fail at dispatch.
-    if (!automation.enabled && !automation.agentId) {
+    // Why: resuming without a current agent (cleared or retired) would only
+    // schedule runs that fail at dispatch.
+    if (!automation.enabled && !isTuiAgent(automation.agentId)) {
       toast.error(AUTOMATION_MISSING_AGENT_MESSAGE)
       return
     }
