@@ -199,14 +199,20 @@ test.describe('Tasks page', () => {
 
     await orcaPage.getByRole('button', { name: 'Close tasks' }).click()
     await expect(list).toHaveCount(0)
+    const clampedRowsStyle = await orcaPage.addStyleTag({
+      content:
+        '[data-task-list-scroll="github"] > .divide-y { max-height: 0 !important; overflow: hidden !important; }'
+    })
     await openTasksPage(orcaPage)
 
     await expect(orcaPage.getByRole('button', { name: 'Page 28', exact: true })).toHaveAttribute(
       'aria-current',
       'page'
     )
-    await expect(orcaPage.getByText('Issue page 28 item 1', { exact: true })).toBeVisible()
     const restoredList = orcaPage.locator('[data-task-list-scroll="github"]')
+    await expect.poll(() => restoredList.evaluate((element) => element.scrollTop)).toBe(0)
+    await clampedRowsStyle.evaluate((element) => element.remove())
+    await expect(orcaPage.getByText('Issue page 28 item 1', { exact: true })).toBeVisible()
     await expect
       .poll(() => restoredList.evaluate((element) => element.scrollTop))
       .toBeGreaterThan(300)
@@ -224,5 +230,29 @@ test.describe('Tasks page', () => {
     await expect
       .poll(() => restoredList.evaluate((element) => element.scrollTop))
       .toBeGreaterThan(300)
+
+    await orcaPage.getByRole('button', { name: 'Close tasks' }).click()
+    const pendingRestoreStyle = await orcaPage.addStyleTag({
+      content:
+        '[data-task-list-scroll="github"] > .divide-y { max-height: 0 !important; overflow: hidden !important; }'
+    })
+    await openTasksPage(orcaPage)
+    await expect(orcaPage.getByRole('button', { name: 'Page 28', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+    await orcaPage.getByRole('button', { name: 'Page 1', exact: true }).click()
+    await pendingRestoreStyle.evaluate((element) => element.remove())
+    await expect(orcaPage.getByRole('button', { name: 'Page 1', exact: true })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+    await expect
+      .poll(() =>
+        orcaPage
+          .locator('[data-task-list-scroll="github"]')
+          .evaluate((element) => element.scrollTop)
+      )
+      .toBe(0)
   })
 })

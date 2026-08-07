@@ -3950,13 +3950,22 @@ export default function TaskPage(): React.JSX.Element {
     page: number
     scrollTop: number
   } | null>(null)
-  if (taskSource === 'github' && githubMode === 'items' && !pageData.openGitHubWorkItem) {
+
+  useLayoutEffect(() => {
+    if (
+      taskSource !== 'github' ||
+      githubMode !== 'items' ||
+      pageData.openGitHubWorkItem ||
+      pendingGithubScrollRestoreRef.current !== null
+    ) {
+      return
+    }
     taskListPositionRef.current = {
       contextKey: githubResumeContextKey,
       page: currentPage,
       scrollTop: githubListScrollTopRef.current
     }
-  }
+  }, [currentPage, githubMode, githubResumeContextKey, pageData.openGitHubWorkItem, taskSource])
 
   useEffect(
     () => () => {
@@ -4029,19 +4038,53 @@ export default function TaskPage(): React.JSX.Element {
     if (scrollTop === null || !scrollElement || !pages[currentPage]) {
       return
     }
-    scrollElement.scrollTop = scrollTop
-    githubListScrollTopRef.current = scrollElement.scrollTop
-    const frame = window.requestAnimationFrame(() => {
+    let frame: number | null = null
+    let timeout: number | null = null
+    let observer: ResizeObserver | null = null
+    const clearScheduledRestore = (): void => {
+      if (frame !== null) {
+        window.cancelAnimationFrame(frame)
+        frame = null
+      }
+      if (timeout !== null) {
+        window.clearTimeout(timeout)
+        timeout = null
+      }
+      observer?.disconnect()
+    }
+    const restore = (): void => {
       const committedScrollElement = githubListScrollRef.current
       if (!committedScrollElement || pendingGithubScrollRestoreRef.current !== scrollTop) {
         return
       }
       committedScrollElement.scrollTop = scrollTop
-      githubListScrollTopRef.current = committedScrollElement.scrollTop
-      pendingGithubScrollRestoreRef.current = null
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [currentPage, dialogWorkItem, pages])
+      githubListScrollTopRef.current = scrollTop
+      taskListPositionRef.current = {
+        contextKey: githubResumeContextKey,
+        page: currentPage,
+        scrollTop
+      }
+      if (Math.abs(committedScrollElement.scrollTop - scrollTop) < 1) {
+        pendingGithubScrollRestoreRef.current = null
+        clearScheduledRestore()
+      }
+    }
+    observer = new ResizeObserver(restore)
+    for (const child of scrollElement.children) {
+      observer.observe(child)
+    }
+    restore()
+    if (pendingGithubScrollRestoreRef.current === scrollTop) {
+      frame = window.requestAnimationFrame(restore)
+      timeout = window.setTimeout(() => {
+        if (pendingGithubScrollRestoreRef.current === scrollTop) {
+          pendingGithubScrollRestoreRef.current = null
+        }
+        clearScheduledRestore()
+      }, 5_000)
+    }
+    return clearScheduledRestore
+  }, [currentPage, dialogWorkItem, githubResumeContextKey, pages])
 
   const dialogRepoPath = dialogWorkItem ? (repoMap.get(dialogWorkItem.repoId)?.path ?? null) : null
   const dialogSourceContext = useMemo(() => {
@@ -10097,7 +10140,11 @@ export default function TaskPage(): React.JSX.Element {
                 style={{ scrollbarGutter: 'stable' }}
                 onScroll={(event) => {
                   const state = useAppStore.getState()
-                  if (state.activeView !== 'tasks' || state.taskPageData.openGitHubWorkItem) {
+                  if (
+                    state.activeView !== 'tasks' ||
+                    state.taskPageData.openGitHubWorkItem ||
+                    pendingGithubScrollRestoreRef.current !== null
+                  ) {
                     return
                   }
                   const scrollTop = event.currentTarget.scrollTop
@@ -10693,6 +10740,7 @@ export default function TaskPage(): React.JSX.Element {
                     totalPages={totalPages}
                     loadingTarget={loadingTargetPage}
                     onPageChange={(page) => {
+                      pendingGithubScrollRestoreRef.current = null
                       githubListScrollTopRef.current = 0
                       if (githubListScrollRef.current) {
                         githubListScrollRef.current.scrollTop = 0
