@@ -10,13 +10,14 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   unlinkSync
 } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { DatabaseSync } from 'node:sqlite'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { basename, join } from 'node:path'
 
 // Why: write the diag log to userData, not world-readable /tmp, so only the current user can read it.
 let _diagLog: string | null = null
@@ -776,6 +777,10 @@ export async function importCookiesFromFile(
 // Direct import from installed Chromium browser
 // ---------------------------------------------------------------------------
 
+// Why: only used when Electron reports no Chromium version (non-Electron test runs);
+// any real, current Chromium major beats emitting nothing.
+const ELECTRON_CHROMIUM_UA_FALLBACK = '134.0.0.0'
+
 // Why: services bind auth cookies to the creating User-Agent, so build a UA matching the source browser's real version.
 export function getUserAgentForBrowser(
   family: BrowserSessionProfileSource['browserFamily']
@@ -804,29 +809,38 @@ export function getUserAgentForBrowser(
     }
   }
 
-  // Why: forks like Arc version their bundle with a marketing number ("1.104.0"),
-  // so a UA built from the plist reads as Chrome 1 and sites reject the browser
-  // as ancient (STA-3514). Prefer the fork's embedded-Chromium plist when known,
-  // then Chromium's own <User Data>/Last Version record — never emit an
-  // implausible UA.
-  function resolveChromiumUaVersion(
-    appPath: string,
-    uaFamily: BrowserSessionProfileSource['browserFamily'],
-    embeddedChromiumInfoDomain?: string
-  ): string | null {
-    const plistVersion = readInfoPlistVersion(`${appPath}/Contents/Info`)
-    if (!plistVersion) {
+  // Why: Chromium names the framework's Versions/ directory after the full
+  // Chromium version, and Current symlinks the active one — a directory listing
+  // would also see stale versions left behind by an in-place update.
+  function readEmbeddedFrameworkVersion(appPath: string): string | null {
+    const frameworksDir = join(appPath, 'Contents', 'Frameworks')
+    let entries: string[]
+    try {
+      entries = readdirSync(frameworksDir)
+    } catch {
       return null
     }
-    if (isPlausibleChromiumUaVersion(plistVersion)) {
-      return plistVersion
-    }
-    if (embeddedChromiumInfoDomain) {
-      const embedded = readInfoPlistVersion(embeddedChromiumInfoDomain)
-      if (embedded && isPlausibleChromiumUaVersion(embedded)) {
-        return embedded
+    for (const entry of entries) {
+      if (!entry.endsWith('.framework')) {
+        continue
+      }
+      try {
+        const candidate = basename(realpathSync(join(frameworksDir, entry, 'Versions', 'Current')))
+        if (isPlausibleChromiumUaVersion(candidate)) {
+          return candidate
+        }
+      } catch {
+        /* not a versioned framework — try the next one */
       }
     }
+    return null
+  }
+
+  // Why: records the build that last ran against the profile whose cookies are
+  // being imported, which can trail the installed build by a full major.
+  function readProfileLastVersion(
+    uaFamily: BrowserSessionProfileSource['browserFamily']
+  ): string | null {
     const def = CHROMIUM_BROWSERS.find((b) => b.family === uaFamily)
     const root = def ? browserRootPath(def) : null
     if (!root) {
@@ -834,46 +848,82 @@ export function getUserAgentForBrowser(
     }
     try {
       const lastVersion = readFileSync(join(root, 'Last Version'), 'utf-8').trim()
-      if (/^\d+(\.\d+){3}$/.test(lastVersion) && isPlausibleChromiumUaVersion(lastVersion)) {
-        return lastVersion
-      }
+      return isPlausibleChromiumUaVersion(lastVersion) ? lastVersion : null
     } catch {
-      /* missing or unreadable — treat as no version */
+      return null
     }
-    return null
+  }
+
+  // Why: forks version their bundle with a marketing number ("1.104.0"), so a UA
+  // built from the app plist reads as Chrome 1 and sites reject the browser as
+  // ancient (STA-3514). Try each source in turn and never return nothing — a
+  // missing version must not silently drop the impersonation the import depends on.
+  function resolveChromiumUaVersion(
+    appPath: string,
+    uaFamily: BrowserSessionProfileSource['browserFamily'],
+    embeddedChromiumInfoDomain?: string
+  ): string {
+    const plistVersion = readInfoPlistVersion(`${appPath}/Contents/Info`)
+    if (plistVersion && isPlausibleChromiumUaVersion(plistVersion)) {
+      return plistVersion
+    }
+    const frameworkVersion = readEmbeddedFrameworkVersion(appPath)
+    if (frameworkVersion) {
+      diag(`  ${uaFamily}: bundle version unusable, using framework ${frameworkVersion}`)
+      return frameworkVersion
+    }
+    if (embeddedChromiumInfoDomain) {
+      const embedded = readInfoPlistVersion(embeddedChromiumInfoDomain)
+      if (embedded && isPlausibleChromiumUaVersion(embedded)) {
+        diag(`  ${uaFamily}: using embedded Chromium plist ${embedded}`)
+        return embedded
+      }
+    }
+    const lastVersion = readProfileLastVersion(uaFamily)
+    if (lastVersion) {
+      diag(`  ${uaFamily}: using profile Last Version ${lastVersion}`)
+      return lastVersion
+    }
+    // Why: Electron's own Chromium is always a real, current version, so a
+    // slightly-wrong UA beats no UA — the latter reports import success while
+    // the cookies it just wrote fail to authenticate.
+    const fallback = process.versions.chrome ?? ELECTRON_CHROMIUM_UA_FALLBACK
+    diag(`  ${uaFamily}: no source browser version found, falling back to ${fallback}`)
+    return fallback
   }
 
   switch (family) {
     case 'chrome': {
       const v = resolveChromiumUaVersion('/Applications/Google Chrome.app', family)
-      return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36` : null
+      return `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36`
     }
     case 'edge': {
       const v = resolveChromiumUaVersion('/Applications/Microsoft Edge.app', family)
-      return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36 Edg/${v}` : null
+      return `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36 Edg/${v}`
     }
     case 'arc': {
       const v = resolveChromiumUaVersion(
         '/Applications/Arc.app',
         family,
-        // Why: Arc keeps the real Chromium version in ArcCore's plist (Arc 1.158.1 → 151.0.7922.72).
+        // Why: Arc's framework is not a stock chrome_framework, so the version
+        // lives in ArcCore's own plist (Arc 1.158.1 → 151.0.7922.72).
         '/Applications/Arc.app/Contents/Frameworks/ArcCore.framework/Versions/A/Resources/Info'
       )
-      return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36` : null
+      return `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36`
     }
     case 'chromium': {
       const v = resolveChromiumUaVersion('/Applications/Brave Browser.app', family)
-      return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36` : null
+      return `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36`
     }
     case 'comet': {
       // Why: Comet is Chromium-based; use Chrome's UA shape so Google-bound auth cookies survive import.
       const v = resolveChromiumUaVersion('/Applications/Comet.app', family)
-      return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36` : null
+      return `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36`
     }
     case 'helium': {
       // Why: Helium is Chromium-based; use Chrome's UA shape so Google-bound auth cookies survive import.
       const v = resolveChromiumUaVersion('/Applications/Helium.app', family)
-      return v ? `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36` : null
+      return `Mozilla/5.0 (${platform}) ${chromeBase} Chrome/${v} Safari/537.36`
     }
     case 'firefox':
     case 'safari':

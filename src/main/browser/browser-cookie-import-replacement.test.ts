@@ -46,7 +46,9 @@ describe('validated cookie replacement', () => {
     cookiesRemoveMock = vi.fn().mockResolvedValue(undefined)
     cookiesSetMock = vi.fn().mockResolvedValue(undefined)
     sessionFromPartitionMock.mockReset().mockReturnValue({
-      cookies: { get: cookiesGetMock, remove: cookiesRemoveMock, set: cookiesSetMock }
+      cookies: { get: cookiesGetMock, remove: cookiesRemoveMock, set: cookiesSetMock },
+      setUserAgent: vi.fn(),
+      webRequest: { onBeforeSendHeaders: vi.fn() }
     })
   })
 
@@ -189,7 +191,9 @@ describe('native Chromium integrity-cookie accounting', () => {
         remove: vi.fn().mockResolvedValue(undefined),
         set: cookiesSetMock
       },
-      clearStorageData: clearStorageDataMock
+      clearStorageData: clearStorageDataMock,
+      setUserAgent: vi.fn(),
+      webRequest: { onBeforeSendHeaders: vi.fn() }
     })
   })
 

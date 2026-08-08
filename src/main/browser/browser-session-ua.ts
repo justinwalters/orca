@@ -21,13 +21,18 @@ export function cleanElectronUserAgent(ua: string): string {
   )
 }
 
-// Why: Chromium majors passed 80 in 2020; Arc-style marketing versions ("1.104.0")
-// fail this floor, and a UA built from one gets the browser flagged as ancient.
+// Why: Chromium ships a 4-part version; forks version their bundle with a
+// 3-part marketing number (Arc "1.104.0"), so shape alone rejects them
+// regardless of major. The floor is a second guard for a fork that happens to
+// pick a 4-part marketing number.
+const CHROMIUM_VERSION_SHAPE = /^\d+\.\d+\.\d+\.\d+$/
 const MIN_PLAUSIBLE_CHROMIUM_MAJOR = 80
 
 export function isPlausibleChromiumUaVersion(version: string): boolean {
-  const major = Number(version.split('.')[0])
-  return Number.isInteger(major) && major >= MIN_PLAUSIBLE_CHROMIUM_MAJOR
+  if (!CHROMIUM_VERSION_SHAPE.test(version)) {
+    return false
+  }
+  return Number(version.split('.')[0]) >= MIN_PLAUSIBLE_CHROMIUM_MAJOR
 }
 
 // Why: imports before STA-3514 persisted UAs built from the source browser's

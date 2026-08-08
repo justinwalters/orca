@@ -44,7 +44,10 @@ function mockArcPlistVersion(version: string, arcCoreVersion: string | null = nu
   })
 }
 
-function mockArcLastVersion(content: string | null): void {
+function mockArcLastVersion(
+  content: string | null,
+  framework: { name: string; current: string } | null = null
+): void {
   vi.doMock('node:fs', async () => {
     const actual = await vi.importActual<typeof fsModule>('node:fs')
     return {
@@ -57,6 +60,24 @@ function mockArcLastVersion(content: string | null): void {
           return content
         }
         return actual.readFileSync(p as never, enc as never)
+      },
+      readdirSync: (p: unknown, opts?: unknown) => {
+        if (typeof p === 'string' && slashPath(p).endsWith('.app/Contents/Frameworks')) {
+          if (!framework) {
+            throw new Error('ENOENT')
+          }
+          return [framework.name] as never
+        }
+        return actual.readdirSync(p as never, opts as never)
+      },
+      realpathSync: (p: unknown, opts?: unknown) => {
+        if (typeof p === 'string' && slashPath(p).endsWith('/Versions/Current')) {
+          if (!framework) {
+            throw new Error('ENOENT')
+          }
+          return `${slashPath(p).replace(/\/Current$/, '')}/${framework.current}`
+        }
+        return actual.realpathSync(p as never, opts as never)
       }
     }
   })
@@ -104,20 +125,69 @@ describe('getUserAgentForBrowser — Arc (STA-3514)', () => {
     expect(ua).toContain('Safari/537.36')
   })
 
-  it('returns null when the marketing version has no Last Version fallback', async () => {
+  // Why: returning null here would set no UA at all, reporting import success
+  // while the cookies it just wrote fail to authenticate.
+  it('falls back to a plausible Chromium version rather than no UA', async () => {
     mockArcPlistVersion('1.104.0')
     mockArcLastVersion(null)
 
     const { getUserAgentForBrowser } = await import('./browser-cookie-import')
-    expect(getUserAgentForBrowser('arc')).toBeNull()
+    const ua = getUserAgentForBrowser('arc')
+
+    expect(ua).not.toBeNull()
+    expect(ua).not.toContain('Chrome/1.104.0')
+    const major = Number(ua?.match(/Chrome\/(\d+)/)?.[1])
+    expect(major).toBeGreaterThanOrEqual(80)
   })
 
-  it('returns null when Last Version is not a Chromium-shaped version', async () => {
+  it('rejects a Last Version that is not a Chromium-shaped version', async () => {
     mockArcPlistVersion('1.104.0')
     mockArcLastVersion('1.104.0\n')
 
     const { getUserAgentForBrowser } = await import('./browser-cookie-import')
-    expect(getUserAgentForBrowser('arc')).toBeNull()
+    const ua = getUserAgentForBrowser('arc')
+
+    expect(ua).not.toContain('Chrome/1.104.0')
+    const major = Number(ua?.match(/Chrome\/(\d+)/)?.[1])
+    expect(major).toBeGreaterThanOrEqual(80)
+  })
+
+  // Why: a 3-part marketing number with a high major ("142.5.1") passes a
+  // major-only floor but is not a Chromium version.
+  it('rejects a high-major marketing version that is not 4-part', async () => {
+    mockArcPlistVersion('142.5.1')
+    mockArcLastVersion('126.0.6478.127\n')
+
+    const { getUserAgentForBrowser } = await import('./browser-cookie-import')
+    const ua = getUserAgentForBrowser('arc')
+
+    expect(ua).not.toContain('Chrome/142.5.1')
+    expect(ua).toContain('Chrome/126.0.6478.127')
+  })
+
+  // Why: forks shipping a stock chrome_framework carry the real Chromium version
+  // as the Versions/ directory name, so they need no per-fork plist path.
+  it('reads the framework Versions/Current name when the bundle version is a marketing number', async () => {
+    mockArcPlistVersion('1.104.0')
+    mockArcLastVersion(null, { name: 'Chromium Framework.framework', current: '151.0.7922.77' })
+
+    const { getUserAgentForBrowser } = await import('./browser-cookie-import')
+    const ua = getUserAgentForBrowser('arc')
+
+    expect(ua).toContain('Chrome/151.0.7922.77')
+  })
+
+  // Why: Electron-style frameworks use Versions/A, which must not be mistaken
+  // for a version.
+  it('skips a framework whose Versions/Current is not a Chromium version', async () => {
+    mockArcPlistVersion('1.104.0', '151.0.7922.72')
+    mockArcLastVersion(null, { name: 'ArcCore.framework', current: 'A' })
+
+    const { getUserAgentForBrowser } = await import('./browser-cookie-import')
+    const ua = getUserAgentForBrowser('arc')
+
+    expect(ua).not.toContain('Chrome/A')
+    expect(ua).toContain('Chrome/151.0.7922.72')
   })
 
   it('keeps using the plist version when it is already Chromium-shaped', async () => {

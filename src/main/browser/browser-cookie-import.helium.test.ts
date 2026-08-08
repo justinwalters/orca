@@ -195,7 +195,9 @@ describe('getUserAgentForBrowser — Helium', () => {
     expect(ua).toContain('Safari/537.36')
   })
 
-  it('returns null when reading the Helium plist version throws', async () => {
+  // Why: an unreadable plist must not drop the UA entirely — that reports import
+  // success while the cookies it just wrote fail to authenticate (STA-3514).
+  it('falls back to a plausible Chromium version when reading the Helium plist throws', async () => {
     vi.doMock('node:child_process', async () => {
       const actual = await vi.importActual<typeof childProcessModule>('node:child_process')
       return {
@@ -208,7 +210,8 @@ describe('getUserAgentForBrowser — Helium', () => {
 
     const { getUserAgentForBrowser } = await import('./browser-cookie-import')
     const ua = getUserAgentForBrowser('helium')
-    expect(ua).toBeNull()
+    expect(ua).not.toBeNull()
+    expect(Number(ua?.match(/Chrome\/(\d+)/)?.[1])).toBeGreaterThanOrEqual(80)
   })
 })
 

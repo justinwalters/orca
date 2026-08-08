@@ -175,7 +175,9 @@ describe('importCookiesFromFile', () => {
         get: cookiesGetMock,
         remove: cookiesRemoveMock,
         set: cookiesSetMock
-      }
+      },
+      setUserAgent: vi.fn(),
+      webRequest: { onBeforeSendHeaders: vi.fn() }
     })
   })
 
@@ -448,7 +450,9 @@ describe('importCookiesFromBrowser Chromium', () => {
         remove: cookiesRemoveMock,
         flushStore: cookiesFlushStoreMock
       },
-      clearStorageData: clearStorageDataMock
+      clearStorageData: clearStorageDataMock,
+      setUserAgent: vi.fn(),
+      webRequest: { onBeforeSendHeaders: vi.fn() }
     })
   })
 
