@@ -1,6 +1,8 @@
+import type { ExecutionHostId } from '../../../shared/execution-host'
 import type { Tab, TabGroup, Worktree } from '../../../shared/types'
 import { isClipboardTextByteLengthOverLimit } from '../../../shared/clipboard-text'
 import { selectPaletteTypeAliasMatch } from './palette-type-alias-match'
+import { compareBaseSensitivityLocaleText } from './locale-text-collators'
 import { resolveWorktreeDisplayName } from './worktree-default-display-name'
 import type { MatchRange } from './worktree-palette-search'
 
@@ -14,6 +16,8 @@ export type SearchableSimulatorTab = {
 }
 
 export type SimulatorPaletteSearchResult = {
+  /** Worktree ids collide across hosts; activation must not resolve by id alone. */
+  executionHostId?: ExecutionHostId
   tabId: string
   worktreeId: string
   groupId: string
@@ -64,7 +68,7 @@ export type BuildSearchableSimulatorTabsOptions = {
 }
 
 function compareText(a: string, b: string): number {
-  return a.localeCompare(b, undefined, { sensitivity: 'base' })
+  return compareBaseSensitivityLocaleText(a, b)
 }
 
 function findRange(text: string, query: string): MatchRange | null {
@@ -198,6 +202,7 @@ export function searchSimulatorTabs(
     // Why: a cleared display name leaves this undefined at runtime; findRange would throw.
     const worktreeName = resolveWorktreeDisplayName(entry.worktree)
     const baseResult = {
+      executionHostId: entry.worktree.hostId,
       tabId: entry.tab.id,
       worktreeId: entry.worktree.id,
       groupId: entry.tab.groupId,

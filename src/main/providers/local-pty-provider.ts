@@ -13,6 +13,7 @@ import { existsSync } from 'node:fs'
 import * as pty from 'node-pty'
 import { getDefaultWslDistro, parseWslPath, isWslAvailableAsync } from '../wsl'
 import { splitWorktreeIdForFilesystem } from '../../shared/worktree-id'
+import { isBracketedPasteSafeShell } from '../../shared/startup-command-submission'
 import {
   injectHistoryEnv,
   updateHistFileForFallback,
@@ -66,11 +67,23 @@ import { ORCA_HERMES_STARTUP_QUERY_ENV } from '../../shared/hermes-startup-query
 import { PhysicalExitTracker } from '../../shared/physical-exit-tracker'
 import { mergeGitConfigEnvProtocol } from '../../shared/git-credential-prompt-env'
 import { PtyStartupIngress, type PtyIngressEmission } from '../../shared/pty-startup-ingress'
+import { extractOnlyCookedEchoSafeQueryReplies } from '../../shared/terminal-query-reply'
 import { resolvePtyOwnerBackend } from '../../shared/pty-owner-backend'
+import { signalPosixPtyForegroundGroup } from '../pty/posix-pty-foreground-group'
+import { readPtsName } from '../pty/node-pty-pts-name'
 import {
   createPtySlaveEchoProbe,
   readPtySlavePath
 } from '../../shared/pty-slave-line-discipline-echo'
+import {
+  createShellStartupIdentityScanState,
+  drainShellStartupIdentityHeldBytes,
+  scanForShellStartupIdentity
+} from '../shell-startup-identity-scanner'
+import {
+  createShellPromptReadinessProbe,
+  type ShellPromptReadinessProbe
+} from '../shell-prompt-readiness-probe'
 import {
   expandWindowsEnvironmentVariables,
   expandWindowsPathEnvironmentVariables
@@ -236,9 +249,9 @@ function getWslContextFromWorktreeId(
  */
 function getWslContextFromPreferredDistro(
   distro: string | null | undefined
-): { distro: string } | undefined {
+): { distro: string; treatPosixCwdAsWsl: true } | undefined {
   const trimmed = distro?.trim()
-  return trimmed ? { distro: trimmed } : undefined
+  return trimmed ? { distro: trimmed, treatPosixCwdAsWsl: true } : undefined
 }
 
 /**
@@ -667,7 +680,9 @@ export class LocalPtyProvider implements IPtyProvider {
     }
 
     ensureNodePtySpawnHelperExecutable()
-    validateWorkingDirectory(validationCwd)
+    if (args.prevalidatedCwd !== validationCwd) {
+      validateWorkingDirectory(validationCwd)
+    }
 
     const spawnEnv: Record<string, string> = {
       ...mergeGitConfigEnvProtocol(stripInheritedBuildModeEnv(process.env), args.env),
@@ -945,6 +960,11 @@ export class LocalPtyProvider implements IPtyProvider {
     // Shell-ready startup command support
     let resolveShellReady: ((signal: ShellReadySignal) => void) | null = null
     let shellReadyTimeout: ReturnType<typeof setTimeout> | null = null
+    let shellStartupPid: number | null = null
+    let shellPromptReadinessProbe: ShellPromptReadinessProbe | null = null
+    let shellStartupIdentityScanState = shellReadyLaunch?.supportsReadyMarker
+      ? createShellStartupIdentityScanState()
+      : null
     const shellReadyScanState = shellReadyLaunch?.supportsReadyMarker
       ? createShellReadyScanState()
       : null
@@ -961,6 +981,8 @@ export class LocalPtyProvider implements IPtyProvider {
         clearTimeout(shellReadyTimeout)
         shellReadyTimeout = null
       }
+      shellPromptReadinessProbe?.dispose()
+      shellPromptReadinessProbe = null
       const resolve = resolveShellReady
       resolveShellReady = null
       resolve(signal)
@@ -969,11 +991,34 @@ export class LocalPtyProvider implements IPtyProvider {
       if (!shellReadyScanState) {
         return
       }
-      const heldBytes = drainShellReadyHeldBytes(shellReadyScanState)
+      let heldBytes = shellStartupIdentityScanState
+        ? drainShellStartupIdentityHeldBytes(shellStartupIdentityScanState)
+        : ''
+      shellStartupIdentityScanState = null
+      if (heldBytes) {
+        heldBytes = scanForShellReady(shellReadyScanState, heldBytes).output
+      }
+      heldBytes += drainShellReadyHeldBytes(shellReadyScanState)
       if (heldBytes.length === 0) {
         return
       }
       startupIngress.accept(heldBytes)
+    }
+    if (shellReadyScanState) {
+      shellPromptReadinessProbe = createShellPromptReadinessProbe({
+        slavePath: readPtySlavePath(proc),
+        shellPath,
+        shellCwd: effectiveCwd,
+        shellPathEnv: finalEnv.PATH,
+        getShellPid: () => shellStartupPid,
+        onPromptReady: () => {
+          console.warn(
+            `[pty] ${id}: shell-ready wrapper was replaced before its marker; releasing at the identified shell prompt. OSC 133 integration may be unavailable.`
+          )
+          releaseHeldShellReadyBytes()
+          finishShellReady({ postMarkerBytesObserved: true })
+        }
+      })
     }
     if (args.command) {
       if (shellReadyLaunch?.supportsReadyMarker) {
@@ -996,20 +1041,33 @@ export class LocalPtyProvider implements IPtyProvider {
         startupCommandCleanup?.()
         startupCommandCleanup = null
         resolveShellReady = null
+        shellPromptReadinessProbe?.dispose()
+        shellPromptReadinessProbe = null
       })
     }
 
     const disposables: { dispose: () => void }[] = []
     const onDataDisposable = proc.onData((rawData) => {
       let data = rawData
+      if (shellStartupIdentityScanState && resolveShellReady) {
+        const scanned = scanForShellStartupIdentity(shellStartupIdentityScanState, data)
+        data = scanned.output
+        if (scanned.shellPid) {
+          shellStartupPid = scanned.shellPid
+          shellStartupIdentityScanState = null
+        }
+      }
       if (shellReadyScanState && resolveShellReady) {
-        const scanned = scanForShellReady(shellReadyScanState, rawData)
+        const scanned = scanForShellReady(shellReadyScanState, data)
         data = scanned.output
         if (scanned.matched) {
           finishShellReady({ postMarkerBytesObserved: scanned.postMarkerBytesObserved })
         }
       }
       startupIngress.accept(data)
+      if (resolveShellReady && data.length > 0) {
+        shellPromptReadinessProbe?.notifyOutput(data)
+      }
     })
     if (onDataDisposable) {
       disposables.push(onDataDisposable)
@@ -1027,6 +1085,8 @@ export class LocalPtyProvider implements IPtyProvider {
         shellReadyTimeout = null
       }
       startupCommandCleanup?.()
+      shellPromptReadinessProbe?.dispose()
+      shellPromptReadinessProbe = null
       clearPtyState(id)
       startupIngress.drainAndClose()
       startupIngressByPty.delete(id)
@@ -1043,10 +1103,14 @@ export class LocalPtyProvider implements IPtyProvider {
     ptyDisposables.set(id, disposables)
 
     if (args.command && !startupCommandDeliveredInShellArgs) {
-      // Why: only POSIX bash/zsh have bracketed-paste armed so multiline startup prompts paste literally; others use raw submit.
+      // Why: shells with bracketed paste armed take a multiline startup prompt literally; others use raw submit.
       const spawnedShellName = getSpawnedShellName(shellPath).toLowerCase()
       const bracketedPasteSafe =
-        process.platform !== 'win32' && (spawnedShellName === 'bash' || spawnedShellName === 'zsh')
+        process.platform !== 'win32' &&
+        isBracketedPasteSafeShell({
+          shellName: spawnedShellName,
+          waitsForShellReady: shellReadyLaunch?.supportsReadyMarker === true
+        })
       writeStartupCommandWhenShellReady(
         shellReadyPromise,
         proc,
@@ -1075,6 +1139,13 @@ export class LocalPtyProvider implements IPtyProvider {
     return ptyProcesses.has(id)
   }
   write(id: string, data: string): void {
+    // Cooked PTYs echo private DSR/OSC replies; CPR/DA remain immediate (#13137, #7329).
+    if (extractOnlyCookedEchoSafeQueryReplies(data)) {
+      const ingress = startupIngressByPty.get(id)
+      if (ingress?.answerLiveQueryReply(data)) {
+        return
+      }
+    }
     ptyProcesses.get(id)?.write(data)
   }
   resize(id: string, cols: number, rows: number): void {
@@ -1207,11 +1278,20 @@ export class LocalPtyProvider implements IPtyProvider {
     if (!proc) {
       return
     }
-    try {
-      process.kill(proc.pid, signal)
-    } catch {
-      /* Process may already be dead */
+    const signalRootPid = (): void => {
+      try {
+        process.kill(proc.pid, signal)
+      } catch {
+        /* Process may already be dead */
+      }
     }
+    // Why only SIGWINCH: see posix-pty-foreground-group — a real resize reaches the
+    // tty's foreground group, which proc.pid is never a member of.
+    if (signal === 'SIGWINCH') {
+      signalPosixPtyForegroundGroup(proc.pid, readPtsName(proc), signal, signalRootPid)
+      return
+    }
+    signalRootPid()
   }
 
   async getCwd(id: string): Promise<string> {
