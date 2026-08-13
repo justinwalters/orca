@@ -16,9 +16,15 @@
   `docs/verification-log.md`; the fork packet commit is `dffdbcef841da255c461a7676ff6f2a3117b6775`.
 - P7-C+ is blocked pending Justin's explicit stale-baseline choice: sync upstream, or continue
   feature work on the current fork baseline. No choice is inferred here.
+- P7-D is complete and independently certified from a fresh worktree, separate from the builder
+  worktree, at fork commit `7f37198eecd1b27c9846564927e392a3e96340a9`. Evidence is recorded in
+  `docs/rm-integration-verification.md`: targeted tests, full rate-limits suite, typecheck,
+  full-repo oxlint, and clean-state checks all passed; a 27-case adversarial falsification suite
+  found no defects; native polling is provably unchanged (adapter has no callers); no MacBook
+  polling or computer-use dependency exists; the live mini-local `GET /v1/quotas` contract is
+  confirmed fail-closed without exposing a token.
 
 ## Next
 
 1. Finish the ordinary merge of fork `main` with the synced P7 branch and push fork `main`.
 2. Run an independent post-sync typecheck/build certification before claiming P7-C.
-3. P7-D is claimed by codex for the read-only RM quota adapter; implementation and targeted evidence are present, pending independent certification.
