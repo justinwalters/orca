@@ -86,4 +86,21 @@ describe('RateLimitService Resource Monitor observation lane', () => {
       error: 'Resource Monitor request failed with HTTP 401'
     })
   })
+
+  it('does not commit a snapshot after the fetch cycle is aborted', async () => {
+    let releaseRequest!: (value: unknown) => void
+    const request = vi.fn().mockReturnValue(
+      new Promise((resolve) => {
+        releaseRequest = resolve
+      })
+    )
+    const service = new RateLimitService()
+    service.setResourceMonitorRequest(() => 'http://127.0.0.1:8765', request)
+    const controller = new AbortController()
+    const refresh = refreshResourceMonitor(service)(controller.signal)
+    controller.abort()
+    releaseRequest({ records: [{ provider: 'claude', status: 'ok', windows: [] }] })
+    await refresh
+    expect(service.getState().resourceMonitor).toBeNull()
+  })
 })

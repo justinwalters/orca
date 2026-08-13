@@ -199,6 +199,7 @@ import {
   settleServeDesktopActivation as settleServeDesktopActivationGate
 } from './startup/serve-desktop-activation'
 import { RateLimitService } from './rate-limits/service'
+import { createResourceMonitorRequest } from './rate-limits/resource-monitor-request'
 import { readMiniMaxSessionCookie } from './minimax/minimax-cookie-store'
 import { getInitialClaudeRateLimitTarget } from './rate-limits/claude-rate-limit-target'
 import { getInitialCodexRateLimitTarget } from './rate-limits/codex-rate-limit-target'
@@ -2379,25 +2380,7 @@ void app.whenReady().then(async () => {
       process.env.ORCA_RESOURCE_MONITOR_URL ??
       process.env.RESOURCE_MONITOR_URL ??
       'http://127.0.0.1:8765',
-    async (url) => {
-      const token =
-        process.env.ORCA_RESOURCE_MONITOR_TOKEN ??
-        process.env.RESOURCE_MONITOR_TOKEN ??
-        process.env.RM_TOKEN
-      if (!token?.trim()) {
-        throw new Error('Resource Monitor credentials unavailable')
-      }
-      const response = await net.fetch(url, {
-        headers: {
-          Accept: 'application/json',
-          Authorization: `Bearer ${token}`
-        }
-      })
-      if (!response.ok) {
-        throw new Error(`Resource Monitor request failed with HTTP ${response.status}`)
-      }
-      return response.json()
-    }
+    createResourceMonitorRequest((url, init) => net.fetch(url, init))
   )
   codexRuntimeHome = new CodexRuntimeHomeService(store)
   void startCodexStateDbBackfillRecoveryInBackground(getOrcaManagedCodexHomePath())

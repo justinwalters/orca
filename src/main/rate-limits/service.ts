@@ -1896,7 +1896,10 @@ export class RateLimitService {
       return
     }
     try {
-      const snapshot = await readResourceMonitorQuotas(baseUrl, this.resourceMonitorRequest)
+      const snapshot = await readResourceMonitorQuotas(baseUrl, this.resourceMonitorRequest, signal)
+      if (signal.aborted) {
+        return
+      }
       this.resourceMonitor = {
         status: 'ok',
         providers: snapshot.providers,
@@ -1905,6 +1908,9 @@ export class RateLimitService {
         error: null
       }
     } catch (error) {
+      if (signal.aborted) {
+        return
+      }
       this.resourceMonitor = {
         status: 'error',
         providers: {},

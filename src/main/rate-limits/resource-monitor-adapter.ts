@@ -32,7 +32,7 @@ export type ResourceMonitorQuotaSnapshot = {
   records: ResourceMonitorQuotaRecord[]
 }
 
-export type ResourceMonitorQuotaRequest = (url: string) => Promise<unknown>
+export type ResourceMonitorQuotaRequest = (url: string, signal?: AbortSignal) => Promise<unknown>
 
 const RM_QUOTA_PATH = '/v1/quotas'
 const PROVIDERS = new Set<ProviderRateLimits['provider']>([
@@ -184,9 +184,11 @@ export function mapResourceMonitorQuotas(
 
 export async function readResourceMonitorQuotas(
   baseUrl: string,
-  request: ResourceMonitorQuotaRequest
+  request: ResourceMonitorQuotaRequest,
+  signal?: AbortSignal
 ): Promise<ResourceMonitorQuotaSnapshot> {
-  const response = await request(new URL(RM_QUOTA_PATH, baseUrl).toString())
+  const requestUrl = new URL(RM_QUOTA_PATH, baseUrl).toString()
+  const response = signal ? await request(requestUrl, signal) : await request(requestUrl)
   if (!response || typeof response !== 'object') {
     throw new Error('Resource Monitor quota response was not an object')
   }
