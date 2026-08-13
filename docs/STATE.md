@@ -21,3 +21,4 @@
 
 1. Finish the ordinary merge of fork `main` with the synced P7 branch and push fork `main`.
 2. Run an independent post-sync typecheck/build certification before claiming P7-C.
+3. P7-D is claimed by codex for the read-only RM quota adapter; the claim commit must land before implementation.
