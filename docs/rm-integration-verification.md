@@ -98,3 +98,28 @@ fed exactly this kind of 401 response, and it does not crash or fabricate data i
 All checks pass. All falsification attempts failed to produce incorrect behavior. Native polling,
 credential isolation, and raw-record/percentage/timestamp fidelity are confirmed unchanged.
 Independent certification is complete.
+
+## P7-E runtime wiring evidence (2026-08-13)
+
+The certified adapter is now connected to the main-process `RateLimitService` through a separate
+`resourceMonitor` observation payload on `RateLimitState`. Native provider snapshots and polling
+remain unchanged; RM reads run only after a full native refresh, while individual native provider
+refreshes do not invoke the RM request. Raw RM records, window percentages/timestamps, mapped
+provider status, and ignored providers remain in the separate observation payload and are pushed
+through the existing `rateLimits:update` IPC channel. The status bar exposes the RM observation
+status without replacing native provider bars.
+
+Runtime authentication is supplied only by the main-process request bridge from runtime environment
+variables; no credential value is stored in source, documentation, or commits. Missing credentials,
+HTTP errors (including 401), malformed responses, and aborted reads fail closed without fabricated
+provider values.
+
+Verification from the P7-E worktree:
+
+- `pnpm exec vitest run --config config/vitest.config.ts src/main/rate-limits/ src/main/ipc/rate-limits.test.ts src/shared/rate-limit-types.test.ts` — 34 files, 455/455 passed.
+- `pnpm run typecheck` — node, CLI, and web typechecks passed.
+- Changed-scope `pnpm exec oxlint ...` — zero findings.
+- Read-only mini-local probe of `GET http://127.0.0.1:8765/v1/quotas` without credentials returned `401 Unauthorized` and `{"error": "unauthorized"}`; no token or credential material was exposed.
+
+P7-E remains open pending independent certification of the runtime wiring and a real authenticated
+mini-local read-only contract probe performed without exposing the credential.

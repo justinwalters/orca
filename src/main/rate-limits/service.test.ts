@@ -243,6 +243,18 @@ describe('RateLimitService', () => {
     expect(service.getState().grok?.status).toBe('ok')
   })
 
+  it('does not add RM polling to an individual native provider refresh', async () => {
+    const service = new RateLimitService()
+    const resourceMonitorRequest = vi.fn()
+    service.setResourceMonitorRequest(() => 'http://127.0.0.1:8765', resourceMonitorRequest)
+    vi.mocked(fetchGrokRateLimits).mockResolvedValueOnce(okProvider('grok', 42))
+
+    await service.refreshGrok()
+
+    expect(fetchGrokRateLimits).toHaveBeenCalledOnce()
+    expect(resourceMonitorRequest).not.toHaveBeenCalled()
+  })
+
   it('does not refetch Claude when a Codex account switch is queued during fetchAll', async () => {
     const service = new RateLimitService()
     const firstClaude = deferred<ProviderRateLimits>()

@@ -2068,6 +2068,7 @@ function StatusBarInner({ floatingTerminalOpen }: StatusBarProps): React.JSX.Ele
   }
 
   const { claude, codex, gemini, opencodeGo, kimi, antigravity, minimax, grok } = rateLimits
+  const resourceMonitor = rateLimits.resourceMonitor
 
   // Why: a bar is earned by a live snapshot or durable Settings setup; detection-gating hides per-CLI bars when the agent isn't on PATH.
   // Why: Antigravity has no persisted credential, so a checked status item + detected CLI is the durable "show its slot" signal.
@@ -2345,6 +2346,18 @@ function StatusBarInner({ floatingTerminalOpen }: StatusBarProps): React.JSX.Ele
               {translate('auto.components.status.bar.StatusBar.c8857b40f7', 'Refresh usage data')}
             </TooltipContent>
           </Tooltip>
+        )}
+        {resourceMonitor && (
+          <span
+            className="text-muted-foreground"
+            title={
+              resourceMonitor.error ??
+              `Resource Monitor: ${Object.keys(resourceMonitor.providers).length} providers, ${resourceMonitor.ignoredProviders.length} ignored`
+            }
+            aria-label={`Resource Monitor ${resourceMonitor.status}`}
+          >
+            RM: {resourceMonitor.status}
+          </span>
         )}
       </div>
 

@@ -176,7 +176,8 @@ describe('adversarial: non-200/401/malformed HTTP-shaped responses', () => {
     const request = vi.fn().mockResolvedValue({ error: 'unauthorized' })
     await expect(readResourceMonitorQuotas('http://127.0.0.1:8765', request)).resolves.toEqual({
       providers: {},
-      ignoredProviders: []
+      ignoredProviders: [],
+      records: []
     })
   })
   it('throws (does not silently succeed) when response is a raw string, not an object', async () => {
@@ -193,7 +194,8 @@ describe('adversarial: non-200/401/malformed HTTP-shaped responses', () => {
     // records is not an array on an array-as-response (no .records key) -> should degrade to empty, not throw/crash
     await expect(readResourceMonitorQuotas('http://127.0.0.1:8765', request)).resolves.toEqual({
       providers: {},
-      ignoredProviders: []
+      ignoredProviders: [],
+      records: []
     })
   })
   it('does not crash when records contains a null entry mixed with valid entries', () => {

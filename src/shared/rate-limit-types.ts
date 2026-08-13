@@ -47,6 +47,14 @@ export type UsageRateLimitMetadata = {
   resourceMonitorStatus?: string
 }
 
+export type ResourceMonitorObservation = {
+  status: 'ok' | 'error' | 'unavailable'
+  providers: Partial<Record<ProviderRateLimits['provider'], ProviderRateLimits>>
+  ignoredProviders: string[]
+  records: Record<string, unknown>[]
+  error: string | null
+}
+
 export type ProviderRateLimits = {
   provider:
     | 'claude'
@@ -139,4 +147,6 @@ export type RateLimitState = {
   codexTarget: RateLimitRuntimeTarget
   inactiveClaudeAccounts: InactiveAccountUsage[]
   inactiveCodexAccounts: InactiveAccountUsage[]
+  /** RM observations are kept separate from native provider polling snapshots. */
+  resourceMonitor?: ResourceMonitorObservation | null
 }

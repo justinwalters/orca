@@ -30,6 +30,7 @@ describe('Resource Monitor quota adapter', () => {
         resetsAt: Date.parse('2026-08-14T03:00:00Z')
       }
     })
+    expect(result.records).toHaveLength(1)
   })
 
   it('does not fabricate values for stale or unknown records', () => {
@@ -47,13 +48,15 @@ describe('Resource Monitor quota adapter', () => {
       usageMetadata: { resourceMonitorStatus: 'stale' }
     })
     expect(result.ignoredProviders).toEqual(['new-provider'])
+    expect(result.records).toHaveLength(2)
   })
 
   it('uses the injected read-only request boundary and the RM endpoint', async () => {
     const request = vi.fn().mockResolvedValue({ records: [] })
     await expect(readResourceMonitorQuotas('http://127.0.0.1:8765', request)).resolves.toEqual({
       providers: {},
-      ignoredProviders: []
+      ignoredProviders: [],
+      records: []
     })
     expect(request).toHaveBeenCalledWith('http://127.0.0.1:8765/v1/quotas')
   })

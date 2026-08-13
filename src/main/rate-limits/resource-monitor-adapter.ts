@@ -29,6 +29,7 @@ export type ResourceMonitorQuotaResponse = {
 export type ResourceMonitorQuotaSnapshot = {
   providers: Partial<Record<ProviderRateLimits['provider'], ProviderRateLimits>>
   ignoredProviders: string[]
+  records: ResourceMonitorQuotaRecord[]
 }
 
 export type ResourceMonitorQuotaRequest = (url: string) => Promise<unknown>
@@ -174,7 +175,11 @@ export function mapResourceMonitorQuotas(
       }
     }
   }
-  return { providers, ignoredProviders }
+  return {
+    providers,
+    ignoredProviders,
+    records: records.filter((record): record is ResourceMonitorQuotaRecord => Boolean(record))
+  }
 }
 
 export async function readResourceMonitorQuotas(

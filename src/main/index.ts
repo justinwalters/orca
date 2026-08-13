@@ -2,7 +2,16 @@
 import { existsSync, statSync } from 'node:fs'
 import { isAbsolute, join } from 'node:path'
 import os from 'node:os'
-import { app, BrowserWindow, dialog, ipcMain, nativeTheme, powerMonitor, type Tray } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  net,
+  powerMonitor,
+  type Tray
+} from 'electron'
 import { initTccPromptNotice, stopTccPromptNotice } from './macos-tcc-prompt-notice'
 import { electronApp, is } from '@electron-toolkit/utils'
 import {
@@ -2365,6 +2374,31 @@ void app.whenReady().then(async () => {
   codexUsage = new CodexUsageStore(store)
   openCodeUsage = new OpenCodeUsageStore(store)
   rateLimits = new RateLimitService()
+  rateLimits.setResourceMonitorRequest(
+    () =>
+      process.env.ORCA_RESOURCE_MONITOR_URL ??
+      process.env.RESOURCE_MONITOR_URL ??
+      'http://127.0.0.1:8765',
+    async (url) => {
+      const token =
+        process.env.ORCA_RESOURCE_MONITOR_TOKEN ??
+        process.env.RESOURCE_MONITOR_TOKEN ??
+        process.env.RM_TOKEN
+      if (!token?.trim()) {
+        throw new Error('Resource Monitor credentials unavailable')
+      }
+      const response = await net.fetch(url, {
+        headers: {
+          Accept: 'application/json',
+          Authorization: `Bearer ${token}`
+        }
+      })
+      if (!response.ok) {
+        throw new Error(`Resource Monitor request failed with HTTP ${response.status}`)
+      }
+      return response.json()
+    }
+  )
   codexRuntimeHome = new CodexRuntimeHomeService(store)
   void startCodexStateDbBackfillRecoveryInBackground(getOrcaManagedCodexHomePath())
   // Why: an incapable trust-grant host must fall back to the managed home for

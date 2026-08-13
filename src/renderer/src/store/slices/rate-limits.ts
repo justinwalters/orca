@@ -30,7 +30,8 @@ export const createRateLimitSlice: StateCreator<AppState, [], [], RateLimitSlice
     claudeTarget: { runtime: 'host', wslDistro: null },
     codexTarget: { runtime: 'host', wslDistro: null },
     inactiveClaudeAccounts: [],
-    inactiveCodexAccounts: []
+    inactiveCodexAccounts: [],
+    resourceMonitor: null
   },
 
   fetchRateLimits: async () => {

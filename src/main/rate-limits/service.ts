@@ -5,8 +5,13 @@ import type {
   RateLimitState,
   ProviderRateLimits,
   InactiveAccountUsage,
-  RateLimitRuntimeTarget
+  RateLimitRuntimeTarget,
+  ResourceMonitorObservation
 } from '../../shared/rate-limit-types'
+import {
+  readResourceMonitorQuotas,
+  type ResourceMonitorQuotaRequest
+} from './resource-monitor-adapter'
 import { fetchClaudeRateLimits, fetchManagedAccountUsage } from './claude-fetcher'
 import type { InactiveClaudeAccountInfo } from './claude-fetcher'
 import { mapClaudeUsageWindow } from './claude-usage-window'
@@ -61,6 +66,7 @@ type MiniMaxResolvedConfig = {
 }
 
 type GeminiCliOAuthEnabledResolver = () => boolean
+type ResourceMonitorUrlResolver = () => string | null
 type ActiveRateLimitProvider = ProviderRateLimits['provider']
 type ActiveProviderState = {
   provider: ActiveRateLimitProvider
@@ -176,6 +182,9 @@ export class RateLimitService {
     minimax: null,
     grok: null
   }
+  private resourceMonitor: ResourceMonitorObservation | null = null
+  private resourceMonitorUrlResolver: ResourceMonitorUrlResolver | null = null
+  private resourceMonitorRequest: ResourceMonitorQuotaRequest | null = null
   private grokAuthConfigured = readGrokAuthSession().status === 'ok'
   private pollInterval: number = DEFAULT_POLL_MS
   private timer: ReturnType<typeof setInterval> | null = null
@@ -301,6 +310,14 @@ export class RateLimitService {
     this.networkProxySettingsResolver = resolver
   }
 
+  setResourceMonitorRequest(
+    urlResolver: ResourceMonitorUrlResolver,
+    request: ResourceMonitorQuotaRequest
+  ): void {
+    this.resourceMonitorUrlResolver = urlResolver
+    this.resourceMonitorRequest = request
+  }
+
   setInactiveClaudeAccountsResolver(resolver: () => InactiveClaudeAccountInfo[]): void {
     this.inactiveClaudeAccountsResolver = resolver
     this.inactiveClaudeAccountsGeneration += 1
@@ -380,7 +397,8 @@ export class RateLimitService {
       inactiveCodexAccounts: this.buildInactiveArray(
         this.inactiveCodexCache,
         this.inactiveCodexFetching
-      )
+      ),
+      resourceMonitor: this.resourceMonitor
     }
   }
 
@@ -1858,6 +1876,44 @@ export class RateLimitService {
       ...this.state,
       grok: this.applyStalePolicy(grok, previousState.grok)
     })
+    await this.refreshResourceMonitor(signal)
+  }
+
+  private async refreshResourceMonitor(signal: AbortSignal): Promise<void> {
+    if (signal.aborted) {
+      return
+    }
+    const baseUrl = this.resourceMonitorUrlResolver?.() ?? null
+    if (!baseUrl || !this.resourceMonitorRequest) {
+      this.resourceMonitor = {
+        status: 'unavailable',
+        providers: {},
+        ignoredProviders: [],
+        records: [],
+        error: 'Resource Monitor credentials or request bridge unavailable'
+      }
+      this.pushToRenderer()
+      return
+    }
+    try {
+      const snapshot = await readResourceMonitorQuotas(baseUrl, this.resourceMonitorRequest)
+      this.resourceMonitor = {
+        status: 'ok',
+        providers: snapshot.providers,
+        ignoredProviders: snapshot.ignoredProviders,
+        records: snapshot.records as Record<string, unknown>[],
+        error: null
+      }
+    } catch (error) {
+      this.resourceMonitor = {
+        status: 'error',
+        providers: {},
+        ignoredProviders: [],
+        records: [],
+        error: toErrorMessage(error)
+      }
+    }
+    this.pushToRenderer()
   }
 
   private async runFetchCodexOnlyCycle(signal: AbortSignal): Promise<void> {
