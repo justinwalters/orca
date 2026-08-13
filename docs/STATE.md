@@ -24,6 +24,18 @@
   polling or computer-use dependency exists; the live mini-local `GET /v1/quotas` contract is
   confirmed fail-closed without exposing a token.
 
+- P7-E and P7-G are complete and independently certified from a fresh worktree at fork commit
+  `a3283bf80fc15ae24933a6c0164f2d3161728400` (plus docs commit `e2a21b0f21`). Evidence is recorded
+  in `docs/rm-integration-verification.md`: abort-safety of the runtime refresh cycle (both the
+  success and error paths), fail-closed runtime-only authentication (environment precedence,
+  Darwin private-file fallback rejecting symlinks/non-regular/group-or-world-readable files),
+  request-bridge contract (Bearer auth, JSON Accept, AbortSignal forwarding, non-2xx rejection),
+  and native-provider-polling isolation are all confirmed by source inspection plus 9 new
+  falsification tests against the real filesystem and the real abort path. Focused tests
+  (129/129), full rate-limits suite (475/475), typecheck, full-repo oxlint, and clean-tree/secret
+  scans all passed. A live authenticated mini-local `GET /v1/quotas` probe through the unmodified
+  runtime bridge returned 200 with 5 provider records without exposing the token.
+
 ## Next
 
 1. Finish the ordinary merge of fork `main` with the synced P7 branch and push fork `main`.
