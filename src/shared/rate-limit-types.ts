@@ -43,6 +43,8 @@ export type UsageRateLimitMetadata = {
   lastSuccessfulSource?: UsageRateLimitSource
   /** Unix ms timestamp before which usage refetches should not be attempted (from HTTP Retry-After). */
   retryAtMs?: number
+  /** Raw Resource Monitor status; native polling statuses remain unchanged. */
+  resourceMonitorStatus?: string
 }
 
 export type ProviderRateLimits = {
