@@ -670,3 +670,26 @@ describe('AgentsPane display name override', () => {
     expect(html).toContain('placeholder="Claude"')
   })
 })
+
+describe('AgentsPane icon picker', () => {
+  function renderOpenRow(extra: Partial<GlobalSettings> = {}): string {
+    return renderPane({
+      ...getDefaultSettings('/tmp'),
+      agentCmdOverrides: { claude: 'claude-custom' },
+      ...extra
+    } as GlobalSettings)
+  }
+
+  it('offers an icon picker with the agent selected by default', () => {
+    const html = renderOpenRow()
+    expect(html).toContain('Icon')
+    expect(html).toContain('<select')
+  })
+
+  it('selects the override target when one is set', () => {
+    const html = renderOpenRow({
+      agentIconOverrides: { claude: 'copilot' }
+    } as Partial<GlobalSettings>)
+    expect(html).toContain('value="copilot"')
+  })
+})
