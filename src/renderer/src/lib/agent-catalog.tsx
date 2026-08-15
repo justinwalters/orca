@@ -15,6 +15,8 @@ import {
 import { translate } from '@/i18n/i18n'
 import { createLocalizedCatalog } from '@/i18n/localized-catalog'
 import { AGENT_FAVICON_ASSETS } from './agent-favicon-assets'
+import { resolveAgentDisplayName } from '../../../shared/agent-identity-overrides'
+import { useAppStore } from '@/store'
 
 export type AgentCatalogEntry = {
   id: TuiAgent
@@ -312,8 +314,17 @@ export const getAgentCatalog = createLocalizedCatalog((): AgentCatalogEntry[] =>
 // Why: tests and a few legacy call sites still import a catalog snapshot.
 export const AGENT_CATALOG: AgentCatalogEntry[] = getAgentCatalog()
 
-export function getAgentLabel(agent: TuiAgent): string {
-  return getAgentCatalog().find((entry) => entry.id === agent)?.label ?? agent
+export function getAgentLabel(
+  agent: TuiAgent,
+  overrides?: Partial<Record<TuiAgent, string>> | null
+): string {
+  const base = getAgentCatalog().find((entry) => entry.id === agent)?.label ?? agent
+  // Why: this is the one place agent display names resolve. Callers that already
+  // hold settings may pass overrides directly; everything else reads the
+  // persisted value here, so a rename reaches every existing call site without
+  // each of them threading identity state through.
+  const effective = overrides ?? useAppStore.getState().settings?.agentDisplayNameOverrides
+  return resolveAgentDisplayName(agent, effective, base)
 }
 
 export function AgentIcon({
