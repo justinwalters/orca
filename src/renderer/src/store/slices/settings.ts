@@ -17,6 +17,10 @@ import { createSettingsSearchState, type SettingsSearchState } from './settings-
 import { isRuntimeCatalogListingStale } from './runtime-status-hydration'
 import { normalizeDisabledTuiAgents } from '../../../../shared/tui-agent-selection'
 import {
+  normalizeAgentDisplayNameOverrides,
+  normalizeAgentIconOverrides
+} from '../../../../shared/agent-identity-overrides'
+import {
   normalizeTuiAgentArgsRecord,
   normalizeTuiAgentEnvRecord
 } from '../../../../shared/tui-agent-launch-defaults'
@@ -110,6 +114,14 @@ function normalizeSettingsUpdates(
   if ('agentDefaultEnv' in updates) {
     sanitizedUpdates.agentDefaultEnv = normalizeTuiAgentEnvRecord(updates.agentDefaultEnv)
     sanitizedUpdates.agentYoloDefaultsMigrated = true
+  }
+  if ('agentDisplayNameOverrides' in updates) {
+    sanitizedUpdates.agentDisplayNameOverrides = normalizeAgentDisplayNameOverrides(
+      updates.agentDisplayNameOverrides
+    )
+  }
+  if ('agentIconOverrides' in updates) {
+    sanitizedUpdates.agentIconOverrides = normalizeAgentIconOverrides(updates.agentIconOverrides)
   }
   if ('uiLanguage' in updates) {
     sanitizedUpdates.uiLanguage = normalizeUiLanguage(updates.uiLanguage)
