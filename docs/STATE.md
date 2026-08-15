@@ -1,5 +1,76 @@
 # Orca fork — state of play
 
+## Session handoff (2026-08-15, upstream sync to 1.4.178-rc.2)
+
+- Synced the fork to upstream `stablyai/main` at `35b308f46e4983cb1691473cbeb48f33043cb7f7`
+  ("Remove worktree deletion success toasts (#14724)", 2026-08-15). Work is on branch
+  `justinwalters/upstream-sync-2026-08-15`, merge commit `42f4afea17`, branched from `main`
+  at `a2d6b2d33e`. Not yet pushed and not yet merged to `main`.
+- The fork is now **0 behind / 18 ahead** of upstream. Package version moved to `orca@1.4.178-rc.2`.
+
+### Fork patches preserved
+
+All 17 fork commits are retained. The fork's footprint is overwhelmingly additive — 2,291
+insertions against 5 deletions. Nine `src/main/rate-limits/resource-monitor-*` files do not
+exist upstream at all, so they had no collision surface. Only seven pre-existing files were
+ever modified, and upstream had touched just three of them.
+
+### Conflicts and resolutions
+
+Exactly one conflict: `src/main/rate-limits/service.test.ts`, modify/delete. Upstream
+`9367169888` ("refactor(tests): split every oversized test file off the max-lines suppression
+list") deleted the file by splitting it into per-concern suites, while the fork had added a
+12-line test to it.
+
+Resolution: accepted upstream's deletion, and re-homed the fork's RM-isolation test — `does not
+add RM polling to an individual native provider refresh` — into
+`src/main/rate-limits/service-refresh-orchestration.test.ts`, the file upstream created to own
+`RateLimitService` refresh orchestration. That file already imports `RateLimitService`, the
+mocked `fetchGrokRateLimits`, `okProvider`, and `vi`, so the test moved without adaptation.
+This test is P7-D/P7-E certification evidence (native polling isolation) and had to survive.
+
+`src/main/index.ts` and `src/renderer/src/components/status-bar/StatusBar.tsx` auto-merged.
+
+### Dependencies
+
+`pnpm-lock.yaml` was not changed by the merge. `engines.node` remains `24` and `packageManager`
+remains `pnpm@10.24.0`. No reinstall was required.
+
+### Verification (Node v24.19.0, Mac mini)
+
+- `pnpm run typecheck` — passed across all three tsconfig projects.
+- RM and rate-limits suites on the merged tree — **471 passed / 44 files**, including the
+  re-homed isolation test, confirmed passing by name.
+- `pnpm test` (full suite) — **52,829 passed, 70 failed across 7 files**, 124 skipped.
+
+### The 70 failures are pre-existing, not a sync regression
+
+All seven failing files are terminal/xterm rendering:
+`src/main/daemon/terminal-snapshot-osc8-roundtrip.test.ts` and six
+`src/renderer/src/components/terminal-pane/terminal-ime-*` suites. None touch Resource Monitor
+or rate limits.
+
+This was falsified rather than assumed: the identical seven files were run against a pristine
+`upstream/main` worktree at `35b308f46e` containing **zero fork commits**. All seven fail there
+too, with the same two unhandled errors (`Cannot read properties of undefined (reading
+'dimensions')` from `@xterm/xterm`). They are upstream or headless-environment failures.
+
+### Not yet done
+
+- No packaged `.app` was built. Per `suki`'s `docs/decisions/orca-fork-topology.md` that needs
+  the MacBook's Xcode as a disposable build worker from an exact verified commit.
+- `pnpm run lint` was not run (it includes the max-lines ratchet and the localization verifiers).
+- **This is builder evidence only.** Independent certification from a fresh session has not been
+  performed, and the fork's standard for a gate of this kind is `cert: req`.
+
+### Next
+
+1. Optionally run `pnpm run lint` and build a packaged `.app` on the MacBook worker.
+2. Obtain independent certification of this sync if the `cert: req` standard is being held.
+3. `P7-C` (agent display-name settings) is unblocked once the above is accepted. Its design is
+   in `docs/agent-identity-design.md` and its task-by-task plan in
+   `docs/agent-identity-implementation-plan.md`.
+
 ## Session handoff (2026-08-12, upstream sync complete)
 
 - The fork is `github.com/justinwalters/orca`, parent `github.com/stablyai/orca`.
