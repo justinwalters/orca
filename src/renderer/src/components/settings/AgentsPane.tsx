@@ -303,7 +303,14 @@ function AgentIconPicker({
   // ids that already ship an icon. There is no free-text or file path to enter,
   // and resolveAgentIconAgent rejects anything outside that set on read, so a
   // hand-edited settings file cannot inject one either.
-  const options = getAgentCatalog()
+  //
+  // Explicitly empty overrides: this list is agent IDENTITY (which agent's icon
+  // you are picking), not the live display name. Passing no argument here would
+  // resolve display-name overrides into these option labels, so renaming an
+  // agent would also relabel its own icon-picker entry to the new name —
+  // caught in manual verification, where renaming Claude to "KimiTestName"
+  // made the Icon field itself read "KimiTestName".
+  const options = getAgentCatalog({})
   return (
     <div className="flex flex-col gap-1">
       <span className="text-xs text-muted-foreground">

@@ -692,4 +692,24 @@ describe('AgentsPane icon picker', () => {
     } as Partial<GlobalSettings>)
     expect(html).toContain('value="copilot"')
   })
+
+  it('lists icon options by catalog identity, unaffected by a display-name rename', () => {
+    // Why: regression for a real bug caught in manual verification. Renaming
+    // Claude to "KimiTestName" made the icon dropdown's own option text read
+    // "KimiTestName" instead of "Claude", because the option list was built
+    // from the override-resolved catalog instead of the base one. The bug only
+    // manifests through the real store (getAgentCatalog falls back to
+    // useAppStore.getState() when called with no argument), which is how the
+    // running app resolves it, so this test seeds the store rather than only
+    // passing settings as a prop.
+    const settings = {
+      ...getDefaultSettings('/tmp'),
+      agentCmdOverrides: { claude: 'claude-custom' },
+      agentDisplayNameOverrides: { claude: 'KimiTestName' }
+    } as GlobalSettings
+    useAppStore.setState({ settings })
+    const html = renderPane(settings)
+    expect(html).toContain('>Claude</option>')
+    expect(html).not.toContain('>KimiTestName</option>')
+  })
 })
