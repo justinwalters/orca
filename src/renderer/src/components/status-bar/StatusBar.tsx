@@ -2352,11 +2352,23 @@ function StatusBarInner({ floatingTerminalOpen }: StatusBarProps): React.JSX.Ele
             className="text-muted-foreground"
             title={
               resourceMonitor.error ??
-              `Resource Monitor: ${Object.keys(resourceMonitor.providers).length} providers, ${resourceMonitor.ignoredProviders.length} ignored`
+              translate(
+                'auto.components.status.bar.StatusBar.e0852f9561',
+                'Resource Monitor: {{value0}} providers, {{value1}} ignored',
+                {
+                  value0: Object.keys(resourceMonitor.providers).length,
+                  value1: resourceMonitor.ignoredProviders.length
+                }
+              )
             }
-            aria-label={`Resource Monitor ${resourceMonitor.status}`}
+            aria-label={translate(
+              'auto.components.status.bar.StatusBar.bfeadce885',
+              'Resource Monitor {{value0}}',
+              { value0: resourceMonitor.status }
+            )}
           >
-            RM: {resourceMonitor.status}
+            {translate('auto.components.status.bar.StatusBar.3e301fc9a7', 'RM:')}{' '}
+            {resourceMonitor.status}
           </span>
         )}
       </div>

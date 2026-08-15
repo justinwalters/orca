@@ -3447,7 +3447,10 @@
             "antigravityUsageDetails": "Open Antigravity usage details",
             "grokUsageAria": "Open Grok usage details",
             "grokUsageMenu": "Grok Usage",
-            "floatingTerminalNewActivity": "{{label}}, new activity"
+            "floatingTerminalNewActivity": "{{label}}, new activity",
+            "e0852f9561": "Resource Monitor: {{value0}} providers, {{value1}} ignored",
+            "bfeadce885": "Resource Monitor {{value0}}",
+            "3e301fc9a7": "RM:"
           },
           "StatusBarUsageEmptyCta": {
             "828c764a79": "Connect an account",
