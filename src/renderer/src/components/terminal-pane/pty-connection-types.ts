@@ -6,7 +6,8 @@ import type { AgentCompletionStatusSnapshot } from './agent-completion-coordinat
 import type { EventProps } from '../../../../shared/telemetry-events'
 import type { TerminalColorSchemeMode } from '../../../../shared/terminal-color-scheme-protocol'
 import type { StartupCommandDelivery } from '../../../../shared/codex-startup-delivery'
-import type { SetupSplitDirection, TuiAgent } from '../../../../shared/types'
+import type { TuiAgent } from '../../../../shared/tui-agent'
+import type { SetupSplitDirection } from '../../../../shared/worktree/launch-types'
 import type {
   AgentProviderSessionMetadata,
   SleepingAgentLaunchConfig
@@ -48,6 +49,9 @@ export type PtyConnectionDeps = {
   } | null
   restoredLeafId?: string | null
   restoredPtyIdByLeafId?: Record<string, string>
+  /** Park intent sampled at render time, before the host disposes the tab's
+   *  watchers; consumed once the restored layout has been replayed. */
+  mountFollowsTerminalPark: boolean
   paneTransportsRef: React.RefObject<Map<number, PtyTransport>>
   paneMode2031Ref: React.RefObject<Map<number, boolean>>
   /** Per-pane mirror of the kitty keyboard flags the pane's application
