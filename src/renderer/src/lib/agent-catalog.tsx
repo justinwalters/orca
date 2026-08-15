@@ -45,7 +45,7 @@ function getCatalogPlatform(): NodeJS.Platform {
   return typeof process === 'undefined' ? 'linux' : process.platform
 }
 
-export const getAgentCatalog = createLocalizedCatalog((): AgentCatalogEntry[] => [
+const getBaseAgentCatalog = createLocalizedCatalog((): AgentCatalogEntry[] => [
   {
     id: 'claude',
     label: translate('auto.lib.agent.catalog.0708ed89f1', 'Claude'),
@@ -311,20 +311,53 @@ export const getAgentCatalog = createLocalizedCatalog((): AgentCatalogEntry[] =>
   }
 ])
 
-// Why: tests and a few legacy call sites still import a catalog snapshot.
-export const AGENT_CATALOG: AgentCatalogEntry[] = getAgentCatalog()
+/** Why: agent labels render in contexts where the store is not a full instance —
+ *  module load, and the many tests that mock `@/store` with only a selector
+ *  function. Reading defensively and falling back to "no overrides" yields the
+ *  catalog label, which is the correct answer for a display path rather than a
+ *  crash. */
+function readPersistedDisplayNameOverrides(): Partial<Record<TuiAgent, string>> | undefined {
+  return typeof useAppStore.getState === 'function'
+    ? useAppStore.getState().settings?.agentDisplayNameOverrides
+    : undefined
+}
+
+/** Why: every agent display name in the renderer resolves here. The cached
+ *  base stays locale-keyed; user overrides are layered on top of it so a rename
+ *  reaches every consumer without each call site threading identity state.
+ *  Callers holding settings may pass overrides directly; the rest read them. */
+export function getAgentCatalog(
+  overrides?: Partial<Record<TuiAgent, string>> | null
+): AgentCatalogEntry[] {
+  const base = getBaseAgentCatalog()
+  const effective = overrides ?? readPersistedDisplayNameOverrides()
+  if (!effective) {
+    return base
+  }
+  let changed = false
+  const resolved = base.map((entry) => {
+    const label = resolveAgentDisplayName(entry.id, effective, entry.label)
+    if (label === entry.label) {
+      return entry
+    }
+    changed = true
+    return { ...entry, label }
+  })
+  // Why: return the cached array untouched when nothing actually differs, so
+  // referential identity holds and React memoization is not invalidated.
+  return changed ? resolved : base
+}
+
+// Why: tests and a few legacy call sites still import a catalog snapshot. It is
+// deliberately the un-overridden base — a module-load snapshot cannot track
+// later renames, so it must not pretend to.
+export const AGENT_CATALOG: AgentCatalogEntry[] = getBaseAgentCatalog()
 
 export function getAgentLabel(
   agent: TuiAgent,
   overrides?: Partial<Record<TuiAgent, string>> | null
 ): string {
-  const base = getAgentCatalog().find((entry) => entry.id === agent)?.label ?? agent
-  // Why: this is the one place agent display names resolve. Callers that already
-  // hold settings may pass overrides directly; everything else reads the
-  // persisted value here, so a rename reaches every existing call site without
-  // each of them threading identity state through.
-  const effective = overrides ?? useAppStore.getState().settings?.agentDisplayNameOverrides
-  return resolveAgentDisplayName(agent, effective, base)
+  return getAgentCatalog(overrides).find((entry) => entry.id === agent)?.label ?? agent
 }
 
 export function AgentIcon({

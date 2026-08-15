@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { getAgentLabel } from './agent-catalog'
+import { getAgentCatalog, getAgentLabel } from './agent-catalog'
 import { useAppStore } from '@/store'
 import { i18n } from '@/i18n/i18n'
 
@@ -43,5 +43,44 @@ describe('getAgentLabel', () => {
 
   it('still returns the agent id for an agent missing from the catalog', () => {
     expect(getAgentLabel('not-a-real-agent' as never, {})).toBe('not-a-real-agent')
+  })
+})
+
+describe('getAgentCatalog', () => {
+  it('applies display-name overrides to catalog entries', () => {
+    const entry = getAgentCatalog({ hermes: 'Suki' }).find((e) => e.id === 'hermes')
+    expect(entry?.label).toBe('Suki')
+  })
+
+  it('leaves other entries untouched', () => {
+    const codex = getAgentCatalog({ hermes: 'Suki' }).find((e) => e.id === 'codex')
+    expect(codex?.label).toBe('Codex')
+  })
+
+  it('returns the identical array when no override applies', () => {
+    // Why: React memoization depends on referential stability. Allocating a new
+    // array on every call would invalidate consumers for no reason.
+    expect(getAgentCatalog({})).toBe(getAgentCatalog({}))
+  })
+
+  it('does not mutate the cached base catalog', () => {
+    getAgentCatalog({ hermes: 'Suki' })
+    expect(getAgentCatalog({}).find((e) => e.id === 'hermes')?.label).toBe('Hermes')
+  })
+
+  it('reads overrides from settings when none are passed', () => {
+    useAppStore.setState({
+      settings: { agentDisplayNameOverrides: { hermes: 'Suki' } } as never
+    })
+    expect(getAgentCatalog().find((e) => e.id === 'hermes')?.label).toBe('Suki')
+  })
+})
+
+describe('single resolver', () => {
+  it('keeps getAgentLabel and getAgentCatalog in agreement', () => {
+    const overrides = { hermes: 'Suki', codex: 'Cx' }
+    for (const entry of getAgentCatalog(overrides)) {
+      expect(getAgentLabel(entry.id, overrides)).toBe(entry.label)
+    }
   })
 })
