@@ -15,7 +15,10 @@ import {
 import { translate } from '@/i18n/i18n'
 import { createLocalizedCatalog } from '@/i18n/localized-catalog'
 import { AGENT_FAVICON_ASSETS } from './agent-favicon-assets'
-import { resolveAgentDisplayName } from '../../../shared/agent-identity-overrides'
+import {
+  resolveAgentDisplayName,
+  resolveAgentIconAgent
+} from '../../../shared/agent-identity-overrides'
 import { useAppStore } from '@/store'
 
 export type AgentCatalogEntry = {
@@ -322,6 +325,12 @@ function readPersistedDisplayNameOverrides(): Partial<Record<TuiAgent, string>> 
     : undefined
 }
 
+function readPersistedIconOverrides(): Partial<Record<TuiAgent, TuiAgent>> | undefined {
+  return typeof useAppStore.getState === 'function'
+    ? useAppStore.getState().settings?.agentIconOverrides
+    : undefined
+}
+
 /** Why: every agent display name in the renderer resolves here. The cached
  *  base stays locale-keyed; user overrides are layered on top of it so a rename
  *  reaches every consumer without each call site threading identity state.
@@ -362,10 +371,12 @@ export function getAgentLabel(
 
 export function AgentIcon({
   agent,
-  size = 14
+  size = 14,
+  iconOverrides
 }: {
   agent: TuiAgent | null | undefined
   size?: number
+  iconOverrides?: Partial<Record<TuiAgent, TuiAgent>> | null
 }): React.JSX.Element {
   // Why: render a neutral question-mark glyph when the agent identity is not
   // yet known. Before, the caller coerced null → 'claude', which caused Codex
@@ -374,38 +385,42 @@ export function AgentIcon({
   if (!agent) {
     return <AgentLetterIcon letter="?" size={size} />
   }
-  if (agent === 'claude' || agent === 'claude-agent-teams') {
+  // Why: an icon override means "render that agent's icon", so every branch
+  // below — glyph, bundled favicon, remote favicon, letter fallback — resolves
+  // through the same id rather than the requested one.
+  const iconAgent = resolveAgentIconAgent(agent, iconOverrides ?? readPersistedIconOverrides())
+  if (iconAgent === 'claude' || iconAgent === 'claude-agent-teams') {
     return <ClaudeIcon size={size} />
   }
-  if (agent === 'codex') {
+  if (iconAgent === 'codex') {
     return <OpenAIIcon size={size} />
   }
-  if (agent === 'droid') {
+  if (iconAgent === 'droid') {
     return <DroidIcon size={size} />
   }
-  if (agent === 'pi') {
+  if (iconAgent === 'pi') {
     return <PiIcon size={size} />
   }
-  if (agent === 'omp') {
+  if (iconAgent === 'omp') {
     return <OmpIcon size={size} />
   }
-  if (agent === 'aider') {
+  if (iconAgent === 'aider') {
     return <AiderIcon size={size} />
   }
-  if (agent === 'kilo') {
+  if (iconAgent === 'kilo') {
     return <KiloIcon size={size} />
   }
-  if (agent === 'copilot') {
+  if (iconAgent === 'copilot') {
     return <CopilotIcon size={size} />
   }
-  if (agent === 'opencode') {
+  if (iconAgent === 'opencode') {
     return <OpenCodeIcon size={size} />
   }
-  const catalogEntry = getAgentCatalog().find((a) => a.id === agent)
+  const catalogEntry = getAgentCatalog().find((a) => a.id === iconAgent)
   // Why: prefer the favicon bundled at build time so the icon renders without a
   // live network request — Google's favicon service is unreachable in some
   // regions and offline, which left these icons broken (#8451).
-  const bundledFaviconUrl = AGENT_FAVICON_ASSETS[agent]
+  const bundledFaviconUrl = AGENT_FAVICON_ASSETS[iconAgent]
   // Why: one resolved src for guard + attribute so empty `iconUrl` cannot pass
   // a truthy `||` check while `??` still renders a broken `<img src="">`.
   const iconSrc = catalogEntry?.iconUrl ?? bundledFaviconUrl
@@ -436,6 +451,6 @@ export function AgentIcon({
       />
     )
   }
-  const label = catalogEntry?.label ?? agent
+  const label = catalogEntry?.label ?? iconAgent
   return <AgentLetterIcon letter={label.charAt(0).toUpperCase()} size={size} />
 }

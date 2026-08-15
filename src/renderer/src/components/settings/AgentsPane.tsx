@@ -96,6 +96,8 @@ type AgentRowProps = {
   defaultLabel: string
   displayNameOverride: string | undefined
   onSaveDisplayName: (value: string) => void
+  iconOverride: TuiAgent | undefined
+  onSaveIconOverride: (value: TuiAgent) => void
   onSetDefault: () => void
   onSetEnabled: (enabled: boolean) => void
   onSaveOverride: (value: string) => void
@@ -103,6 +105,12 @@ type AgentRowProps = {
   onSaveEnv: (value: Record<string, string>) => void
   /** Codex-only: current runtime scope label + persisted history-source override. */
   sessionSourceHome?: AgentSessionSourceHomeControl
+}
+
+type AgentIconPickerProps = {
+  agentId: TuiAgent
+  iconOverride: TuiAgent | undefined
+  onSaveIconOverride: (value: TuiAgent) => void
 }
 
 type AgentDisplayNameInputProps = {
@@ -283,6 +291,41 @@ export function AgentPermissionsSetting({
         }
       />
     </section>
+  )
+}
+
+function AgentIconPicker({
+  agentId,
+  iconOverride,
+  onSaveIconOverride
+}: AgentIconPickerProps): React.JSX.Element {
+  // Why: options come from the catalog, so the only selectable values are agent
+  // ids that already ship an icon. There is no free-text or file path to enter,
+  // and resolveAgentIconAgent rejects anything outside that set on read, so a
+  // hand-edited settings file cannot inject one either.
+  const options = getAgentCatalog()
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs text-muted-foreground">
+        {translate('auto.components.settings.AgentsPane.f9c8f8a21c', 'Icon')}
+      </span>
+      <div className="flex items-center gap-2">
+        {/* Why: preview the chosen icon directly, with overrides emptied so the
+            selection is shown as-is rather than resolved a second time. */}
+        <AgentIcon agent={iconOverride ?? agentId} size={16} iconOverrides={{}} />
+        <select
+          value={iconOverride ?? agentId}
+          onChange={(e) => onSaveIconOverride(e.target.value as TuiAgent)}
+          className="h-7 flex-1 rounded-md border border-border/50 bg-background/50 px-1 text-xs"
+        >
+          {options.map((entry) => (
+            <option key={entry.id} value={entry.id}>
+              {entry.label}
+            </option>
+          ))}
+        </select>
+      </div>
+    </div>
   )
 }
 
@@ -570,6 +613,8 @@ function AgentRow({
   defaultLabel,
   displayNameOverride,
   onSaveDisplayName,
+  iconOverride,
+  onSaveIconOverride,
   onSetDefault,
   onSetEnabled,
   onSaveOverride,
@@ -695,6 +740,13 @@ function AgentRow({
               defaultLabel={defaultLabel}
               displayNameOverride={displayNameOverride}
               onSaveDisplayName={onSaveDisplayName}
+            />
+          </div>
+          <div className="mb-2">
+            <AgentIconPicker
+              agentId={agentId}
+              iconOverride={iconOverride}
+              onSaveIconOverride={onSaveIconOverride}
             />
           </div>
           {/* Why: key by the persisted seed so settings changes reset the draft during reconciliation, not in a follow-up effect commit. */}
@@ -838,6 +890,19 @@ export function AgentsPane({
   }
 
   const agentDisplayNameOverrides = settings.agentDisplayNameOverrides ?? {}
+
+  const agentIconOverrides = settings.agentIconOverrides ?? {}
+
+  const saveIconOverride = (id: TuiAgent, value: TuiAgent): void => {
+    const next = { ...agentIconOverrides }
+    if (value === id) {
+      // Why: selecting the agent's own icon is the default, not an override.
+      delete next[id]
+    } else {
+      next[id] = value
+    }
+    updateSettings({ agentIconOverrides: next })
+  }
 
   const saveDisplayName = (id: TuiAgent, value: string): void => {
     const next = { ...agentDisplayNameOverrides }
@@ -1044,6 +1109,8 @@ export function AgentsPane({
                 defaultLabel={getAgentLabel(agent.id, {})}
                 displayNameOverride={agentDisplayNameOverrides[agent.id]}
                 onSaveDisplayName={(v) => saveDisplayName(agent.id, v)}
+                iconOverride={agentIconOverrides[agent.id]}
+                onSaveIconOverride={(v) => saveIconOverride(agent.id, v)}
                 onSetDefault={() => setDefault(agent.id)}
                 onSetEnabled={(enabled) => setAgentEnabled(agent.id, enabled)}
                 onSaveOverride={(v) => saveOverride(agent.id, v)}
@@ -1096,6 +1163,8 @@ export function AgentsPane({
                 defaultLabel={getAgentLabel(agent.id, {})}
                 displayNameOverride={agentDisplayNameOverrides[agent.id]}
                 onSaveDisplayName={() => {}}
+                iconOverride={agentIconOverrides[agent.id]}
+                onSaveIconOverride={() => {}}
                 onSetDefault={() => {}}
                 onSetEnabled={(enabled) => setAgentEnabled(agent.id, enabled)}
                 onSaveOverride={() => {}}

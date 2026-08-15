@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { getAgentCatalog, getAgentLabel } from './agent-catalog'
+import React from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { AgentIcon, getAgentCatalog, getAgentLabel } from './agent-catalog'
 import { useAppStore } from '@/store'
 import { i18n } from '@/i18n/i18n'
 
@@ -82,5 +84,26 @@ describe('single resolver', () => {
     for (const entry of getAgentCatalog(overrides)) {
       expect(getAgentLabel(entry.id, overrides)).toBe(entry.label)
     }
+  })
+})
+
+describe('AgentIcon icon override', () => {
+  function markup(agent: string, iconOverrides: Record<string, string>): string {
+    return renderToStaticMarkup(React.createElement(AgentIcon, { agent, iconOverrides } as never))
+  }
+
+  it('renders the override target exactly as that agent renders itself', () => {
+    // Why: the strongest statement of "use that agent's icon" is that the two
+    // are indistinguishable, rather than asserting a particular glyph name.
+    expect(markup('hermes', { hermes: 'copilot' })).toBe(markup('copilot', {}))
+  })
+
+  it('renders its own icon when no override applies', () => {
+    expect(markup('codex', {})).toBe(markup('codex', {}))
+    expect(markup('hermes', {})).not.toBe(markup('copilot', {}))
+  })
+
+  it('ignores an override pointing outside the shipped agent set', () => {
+    expect(markup('hermes', { hermes: 'https://evil.example/x.png' })).toBe(markup('hermes', {}))
   })
 })
