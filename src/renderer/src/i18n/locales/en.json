@@ -3704,6 +3704,19 @@
             "onDescription": "Keep this computer awake continuously",
             "autoDescription": "Stay awake while an agent is working",
             "offDescription": "Allow normal system sleep behavior"
+          },
+          "ResourceMonitorMeter": {
+            "bacd265147": "Resource Monitor quota meter",
+            "498d56e8ae": "Updated {{value0}}",
+            "5660311e0c": "Stale — last seen {{value0}}",
+            "a8c866c82b": "{{value0}} — current quota data",
+            "b026550a1a": "{{value0}} — stale quota data",
+            "7edd61a756": "Exhausted",
+            "6d04b5eb91": "{{value0}} — quota status unknown",
+            "c726d58659": "{{value0}} — not tracked by Resource Monitor",
+            "d3e8231aa5": "Resource Monitor is unreachable.",
+            "d79b9a0c4b": "RM unavailable",
+            "0031c79519": "Resource Monitor unavailable"
           }
         }
       },

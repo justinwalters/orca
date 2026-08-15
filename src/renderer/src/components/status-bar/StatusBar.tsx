@@ -62,6 +62,7 @@ import {
 import { ClaudeIcon, GeminiIcon, MiniMaxIcon, OpenAIIcon, OpenCodeGoIcon } from './icons'
 import { AgentIcon } from '@/lib/agent-catalog'
 import { UsageRosterPanel, getTightestUsageSection } from './UsageRosterPanel'
+import { ResourceMonitorMeter } from './ResourceMonitorMeter'
 import { getUsageProviderAccountsSectionId } from './usage-provider-settings-target'
 import { formatRateLimitWindowChipLabel } from '@/lib/window-label-formatter'
 import { useResetCountdownClock } from '@/hooks/useResetCountdownClock'
@@ -2347,30 +2348,7 @@ function StatusBarInner({ floatingTerminalOpen }: StatusBarProps): React.JSX.Ele
             </TooltipContent>
           </Tooltip>
         )}
-        {resourceMonitor && (
-          <span
-            className="text-muted-foreground"
-            title={
-              resourceMonitor.error ??
-              translate(
-                'auto.components.status.bar.StatusBar.e0852f9561',
-                'Resource Monitor: {{value0}} providers, {{value1}} ignored',
-                {
-                  value0: Object.keys(resourceMonitor.providers).length,
-                  value1: resourceMonitor.ignoredProviders.length
-                }
-              )
-            }
-            aria-label={translate(
-              'auto.components.status.bar.StatusBar.bfeadce885',
-              'Resource Monitor {{value0}}',
-              { value0: resourceMonitor.status }
-            )}
-          >
-            {translate('auto.components.status.bar.StatusBar.3e301fc9a7', 'RM:')}{' '}
-            {resourceMonitor.status}
-          </span>
-        )}
+        <ResourceMonitorMeter resourceMonitor={resourceMonitor} providers={rosterProviders} />
       </div>
 
       <div className="flex-1" />
