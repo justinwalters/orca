@@ -13,7 +13,8 @@ import {
 } from 'lucide-react'
 import type { GlobalSettings } from '../../../../shared/global-settings-types'
 import type { TuiAgent } from '../../../../shared/tui-agent'
-import { getAgentCatalog, AgentIcon } from '@/lib/agent-catalog'
+import { getAgentCatalog, getAgentLabel, AgentIcon } from '@/lib/agent-catalog'
+import { AGENT_DISPLAY_NAME_MAX_LENGTH } from '../../../../shared/agent-identity-overrides'
 import { useDetectedAgents, type AgentDetectionTarget } from '@/hooks/useDetectedAgents'
 import { useAppStore } from '@/store'
 import { Button } from '../ui/button'
@@ -91,6 +92,10 @@ type AgentRowProps = {
   cmdOverride: string | undefined
   argsOverride: string
   envOverride: Record<string, string>
+  /** Catalog label with no override applied — the revert target and placeholder. */
+  defaultLabel: string
+  displayNameOverride: string | undefined
+  onSaveDisplayName: (value: string) => void
   onSetDefault: () => void
   onSetEnabled: (enabled: boolean) => void
   onSaveOverride: (value: string) => void
@@ -98,6 +103,12 @@ type AgentRowProps = {
   onSaveEnv: (value: Record<string, string>) => void
   /** Codex-only: current runtime scope label + persisted history-source override. */
   sessionSourceHome?: AgentSessionSourceHomeControl
+}
+
+type AgentDisplayNameInputProps = {
+  defaultLabel: string
+  displayNameOverride: string | undefined
+  onSaveDisplayName: (value: string) => void
 }
 
 type AgentCommandOverrideInputProps = {
@@ -272,6 +283,69 @@ export function AgentPermissionsSetting({
         }
       />
     </section>
+  )
+}
+
+function AgentDisplayNameInput({
+  defaultLabel,
+  displayNameOverride,
+  onSaveDisplayName
+}: AgentDisplayNameInputProps): React.JSX.Element {
+  const draftSeed = displayNameOverride ?? defaultLabel
+  const [nameDraft, setNameDraft] = useState(draftSeed)
+
+  const commitName = (): void => {
+    const trimmed = nameDraft.trim()
+    // Why: clearing the field, or typing the catalog name back, means "use the
+    // default" rather than storing a redundant override.
+    if (!trimmed || trimmed === defaultLabel) {
+      onSaveDisplayName('')
+      setNameDraft(defaultLabel)
+    } else {
+      onSaveDisplayName(trimmed)
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <span className="text-xs text-muted-foreground">
+        {translate('auto.components.settings.AgentsPane.48f548ece2', 'Display name')}
+      </span>
+      <div className="flex items-center gap-2">
+        <Input
+          value={nameDraft}
+          onChange={(e) => setNameDraft(e.target.value)}
+          onBlur={commitName}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              commitName()
+              e.currentTarget.blur()
+            }
+            if (e.key === 'Escape') {
+              setNameDraft(draftSeed)
+              e.currentTarget.blur()
+            }
+          }}
+          placeholder={defaultLabel}
+          maxLength={AGENT_DISPLAY_NAME_MAX_LENGTH}
+          className="h-7 flex-1 text-xs"
+        />
+        {displayNameOverride && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={() => {
+              onSaveDisplayName('')
+              setNameDraft(defaultLabel)
+            }}
+            className="h-7 shrink-0 text-xs text-muted-foreground hover:text-foreground"
+          >
+            {translate('auto.components.settings.AgentsPane.5200dac9da', 'Reset')}
+          </Button>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -493,6 +567,9 @@ function AgentRow({
   cmdOverride,
   argsOverride,
   envOverride,
+  defaultLabel,
+  displayNameOverride,
+  onSaveDisplayName,
   onSetDefault,
   onSetEnabled,
   onSaveOverride,
@@ -610,6 +687,16 @@ function AgentRow({
 
       {isDetected && cmdOpen && (
         <div className="mt-3 pl-10">
+          {/* Why: identity comes before the binary path — this is what the agent
+              is called everywhere else in the app. */}
+          <div className="mb-2">
+            <AgentDisplayNameInput
+              key={`${agentId}:${displayNameOverride ?? ''}`}
+              defaultLabel={defaultLabel}
+              displayNameOverride={displayNameOverride}
+              onSaveDisplayName={onSaveDisplayName}
+            />
+          </div>
           {/* Why: key by the persisted seed so settings changes reset the draft during reconciliation, not in a follow-up effect commit. */}
           <AgentCommandOverrideInput
             key={cmdOverride ?? defaultCmd}
@@ -748,6 +835,20 @@ export function AgentsPane({
       agentId: id,
       enabled
     })
+  }
+
+  const agentDisplayNameOverrides = settings.agentDisplayNameOverrides ?? {}
+
+  const saveDisplayName = (id: TuiAgent, value: string): void => {
+    const next = { ...agentDisplayNameOverrides }
+    const trimmed = value.trim()
+    if (trimmed) {
+      next[id] = trimmed
+    } else {
+      // Why: absence means "use the catalog label"; an empty string is never stored.
+      delete next[id]
+    }
+    updateSettings({ agentDisplayNameOverrides: next })
   }
 
   const saveOverride = (id: TuiAgent, value: string): void => {
@@ -940,6 +1041,9 @@ export function AgentsPane({
                 cmdOverride={cmdOverrides[agent.id]}
                 argsOverride={resolveTuiAgentLaunchArgs(agent.id, agentDefaultArgs)}
                 envOverride={resolveTuiAgentLaunchEnv(agent.id, agentDefaultEnv)}
+                defaultLabel={getAgentLabel(agent.id, {})}
+                displayNameOverride={agentDisplayNameOverrides[agent.id]}
+                onSaveDisplayName={(v) => saveDisplayName(agent.id, v)}
                 onSetDefault={() => setDefault(agent.id)}
                 onSetEnabled={(enabled) => setAgentEnabled(agent.id, enabled)}
                 onSaveOverride={(v) => saveOverride(agent.id, v)}
@@ -989,6 +1093,9 @@ export function AgentsPane({
                 cmdOverride={undefined}
                 argsOverride={resolveTuiAgentLaunchArgs(agent.id, agentDefaultArgs)}
                 envOverride={resolveTuiAgentLaunchEnv(agent.id, agentDefaultEnv)}
+                defaultLabel={getAgentLabel(agent.id, {})}
+                displayNameOverride={agentDisplayNameOverrides[agent.id]}
+                onSaveDisplayName={() => {}}
                 onSetDefault={() => {}}
                 onSetEnabled={(enabled) => setAgentEnabled(agent.id, enabled)}
                 onSaveOverride={() => {}}

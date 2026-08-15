@@ -630,3 +630,43 @@ describe('AgentsPane', () => {
     await secondWrite
   })
 })
+
+describe('AgentsPane display name override', () => {
+  // Why: the per-agent disclosure only renders when an override already exists,
+  // so seed a command override to open it and inspect the identity field.
+  function renderOpenRow(extra: Partial<GlobalSettings> = {}): string {
+    return renderPane({
+      ...getDefaultSettings('/tmp'),
+      agentCmdOverrides: { claude: 'claude-custom' },
+      ...extra
+    } as GlobalSettings)
+  }
+
+  it('offers a display name field seeded with the catalog label', () => {
+    const html = renderOpenRow()
+    expect(html).toContain('Display name')
+    expect(html).toContain('value="Claude"')
+  })
+
+  it('seeds the field with the override when one is set', () => {
+    const html = renderOpenRow({
+      agentDisplayNameOverrides: { claude: 'Assistant' }
+    } as Partial<GlobalSettings>)
+    expect(html).toContain('value="Assistant"')
+  })
+
+  it('renders the overridden name as the agent row label', () => {
+    const html = renderOpenRow({
+      agentDisplayNameOverrides: { claude: 'Assistant' }
+    } as Partial<GlobalSettings>)
+    // The row heading itself must reflect the rename, not just the input.
+    expect(html).toContain('Assistant')
+  })
+
+  it('keeps the catalog label as the placeholder so a cleared field reads as default', () => {
+    const html = renderOpenRow({
+      agentDisplayNameOverrides: { claude: 'Assistant' }
+    } as Partial<GlobalSettings>)
+    expect(html).toContain('placeholder="Claude"')
+  })
+})
